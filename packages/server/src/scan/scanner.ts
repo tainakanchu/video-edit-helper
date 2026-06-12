@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { ProjectSettings } from '@veh/shared';
 import { ffprobe } from './ffprobe.js';
 import { buildDaysAndClips, type GroupingResult, type ProbedFile } from './grouping.js';
+import { resolveMediaRoot } from './winpath.js';
 
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.m4v']);
 const PROBE_CONCURRENCY = 4;
@@ -56,11 +57,29 @@ export async function scanMediaRoots(
   ffprobePath: string,
   onProgress?: (probed: number, total: number) => void,
 ): Promise<ScanResult> {
+  // mediaRoot の実在解決(WSL 上の Windows パスは /mnt/<drive>/ へ自動変換)
+  const resolvedRoots: string[] = [];
+  const missing: string[] = [];
+  for (const root of mediaRoots) {
+    const resolved = resolveMediaRoot(root);
+    if (resolved) resolvedRoots.push(resolved);
+    else missing.push(root);
+  }
+  if (resolvedRoots.length === 0) {
+    throw new Error(
+      `メディアルートが見つかりません: ${missing.join(' / ')}。` +
+        `フォルダの存在とパスの綴りを確認してください` +
+        (process.platform !== 'win32' ? '(Windows パスは /mnt/<ドライブ>/ に自動変換して探しています)' : ''),
+    );
+  }
+  if (missing.length > 0) {
+    console.warn(`[scan] 見つからないメディアルートをスキップ: ${missing.join(' / ')}`);
+  }
+
   // 全 mediaRoot を走査
   const found: FoundFile[] = [];
-  for (const root of mediaRoots) {
-    const abs = path.resolve(root);
-    found.push(...(await walkMediaRoot(abs)));
+  for (const root of resolvedRoots) {
+    found.push(...(await walkMediaRoot(root)));
   }
   // 重複パス除去(複数 root が重なる場合)
   const seen = new Set<string>();
@@ -69,6 +88,11 @@ export async function scanMediaRoots(
     seen.add(f.path);
     return true;
   });
+  if (unique.length === 0) {
+    throw new Error(
+      `動画ファイル(.mp4 / .mov / .m4v)が見つかりませんでした: ${resolvedRoots.join(' / ')}`,
+    );
+  }
 
   const total = unique.length;
   const probed: ProbedFile[] = [];

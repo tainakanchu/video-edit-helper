@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { Clip, Day, ID, ProjectSettings, SourceFile } from '@veh/shared';
+import { canonicalMediaPath } from './winpath.js';
 
 /** ffprobe で抽出した 1 ファイル分のメタデータ(grouping の入力) */
 export interface ProbedFile {
@@ -38,11 +39,12 @@ function shortHash(input: string): string {
 }
 
 export function fileIdOf(absPath: string): string {
-  return shortHash(absPath);
+  // WSL ⇔ Windows ネイティブ間で同じファイルが同じ ID になるよう正規化してからハッシュ
+  return shortHash(canonicalMediaPath(absPath));
 }
 
 export function clipIdOf(firstFileAbsPath: string): string {
-  return shortHash(firstFileAbsPath);
+  return shortHash(canonicalMediaPath(firstFileAbsPath));
 }
 
 /** ファイル名を (prefix, 数値サフィックス) に分解。数値が取れなければ num=null */

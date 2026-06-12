@@ -37,6 +37,7 @@ export class JobCoordinator {
       );
       this.store.replaceScanResult(result.days, result.clips);
       ctx.setProgress(1);
+      ctx.setMessage(`${result.probedCount} ファイル → ${result.clips.length} クリップ / ${result.days.length} 日`);
       // 全クリップに解析ジョブを自動投入
       this.autoEnqueueAnalysis(result.clips);
     });
