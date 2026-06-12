@@ -1,0 +1,114 @@
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import type { ProjectSettings } from '@veh/shared';
+import { ffprobe } from './ffprobe.js';
+import { buildDaysAndClips, type GroupingResult, type ProbedFile } from './grouping.js';
+
+const VIDEO_EXTS = new Set(['.mp4', '.mov', '.m4v']);
+const PROBE_CONCURRENCY = 4;
+
+/** 走査で見つかった候補ファイル(ffprobe 前) */
+interface FoundFile {
+  path: string;
+  fileName: string;
+  dir: string;
+  mediaRoot: string;
+}
+
+/** mediaRoot を再帰走査して対象拡張子ファイルを列挙(隠しディレクトリ skip) */
+export async function walkMediaRoot(mediaRoot: string): Promise<FoundFile[]> {
+  const out: FoundFile[] = [];
+  async function recur(dir: string): Promise<void> {
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch {
+      return; // 読めないディレクトリはスキップ
+    }
+    for (const ent of entries) {
+      if (ent.name.startsWith('.')) continue; // 隠しディレクトリ/ファイル skip
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        await recur(full);
+      } else if (ent.isFile()) {
+        const ext = path.extname(ent.name).toLowerCase();
+        if (VIDEO_EXTS.has(ext)) {
+          out.push({ path: full, fileName: ent.name, dir, mediaRoot });
+        }
+      }
+    }
+  }
+  await recur(mediaRoot);
+  return out;
+}
+
+export interface ScanResult extends GroupingResult {
+  probedCount: number;
+}
+
+/**
+ * mediaRoots を走査・ffprobe(並列 4)してグルーピングする。
+ * onProgress(probed, total) でジョブ進捗を更新。
+ */
+export async function scanMediaRoots(
+  mediaRoots: string[],
+  settings: ProjectSettings,
+  ffprobePath: string,
+  onProgress?: (probed: number, total: number) => void,
+): Promise<ScanResult> {
+  // 全 mediaRoot を走査
+  const found: FoundFile[] = [];
+  for (const root of mediaRoots) {
+    const abs = path.resolve(root);
+    found.push(...(await walkMediaRoot(abs)));
+  }
+  // 重複パス除去(複数 root が重なる場合)
+  const seen = new Set<string>();
+  const unique = found.filter((f) => {
+    if (seen.has(f.path)) return false;
+    seen.add(f.path);
+    return true;
+  });
+
+  const total = unique.length;
+  const probed: ProbedFile[] = [];
+  let done = 0;
+  let cursor = 0;
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const idx = cursor++;
+      if (idx >= unique.length) return;
+      const f = unique[idx]!;
+      try {
+        const [meta, stat] = await Promise.all([ffprobe(f.path, ffprobePath), fsp.stat(f.path)]);
+        probed.push({
+          path: f.path,
+          fileName: f.fileName,
+          dir: f.dir,
+          mediaRoot: f.mediaRoot,
+          sizeBytes: stat.size,
+          durationSec: meta.durationSec,
+          createdAt: meta.createdAt,
+          mtime: stat.mtime.toISOString(),
+          width: meta.width,
+          height: meta.height,
+          videoCodec: meta.videoCodec,
+          audioCodec: meta.audioCodec,
+          fps: meta.fps,
+          playableInBrowser: meta.playableInBrowser,
+        });
+      } catch (e) {
+        console.warn(`[scan] probe failed: ${f.path}: ${(e as Error).message}`);
+      } finally {
+        done++;
+        onProgress?.(done, total);
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: PROBE_CONCURRENCY }, () => worker()));
+
+  const grouping = buildDaysAndClips(probed, settings);
+  return { ...grouping, probedCount: probed.length };
+}

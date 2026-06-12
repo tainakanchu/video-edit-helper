@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+*.tsbuildinfo
+
+# プロジェクトデータ(メモ・キャッシュ)はリポジトリ外
+project-data/
+
+# VAD モデル(scripts/download-model.mjs で取得)
+packages/server/models/*.onnx
+
+.DS_Store
