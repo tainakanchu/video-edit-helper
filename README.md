@@ -34,6 +34,15 @@ ffmpeg:
 
 ## 起動
 
+### 通常利用(一発起動)
+
+```bash
+pnpm build   # 初回と更新時のみ
+pnpm start   # → http://localhost:4810(UI と API を同一ポートで配信)
+```
+
+### 開発時(ホットリロード)
+
 ```bash
 pnpm dev
 ```
@@ -50,6 +59,7 @@ pnpm dev
 | `PORT` | `4810` | API サーバーポート |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | `ffmpeg` / `ffprobe` | バイナリのパス |
 | `VEH_VAD_MODEL` | `packages/server/models/silero_vad.onnx` | VAD モデルパス |
+| `VEH_WEB_DIST` | `packages/web/dist` | 静的配信する Web UI のパス(無ければ API のみ) |
 
 ### プロジェクトデータの構成
 

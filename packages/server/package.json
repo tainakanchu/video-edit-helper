@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",
+    "@fastify/static": "^9.1.3",
     "@veh/shared": "workspace:*",
     "fastify": "^5.0.0",
     "nanoid": "^5.0.0",

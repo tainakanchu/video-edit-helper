@@ -20,6 +20,15 @@ export interface Config {
   ffprobePath: string;
   /** Silero VAD の ONNX モデルパス */
   vadModelPath: string;
+  /** ビルド済み Web UI(packages/web/dist)。存在すれば静的配信する */
+  webDistDir: string;
+}
+
+/** packages/web/dist を import.meta.url 基準で解決 */
+function defaultWebDistDir(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  // server/src または server/dist 配下 → ../../web/dist
+  return path.resolve(here, '..', '..', 'web', 'dist');
 }
 
 /** models/silero_vad.onnx を import.meta.url 基準で解決 */
@@ -42,6 +51,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ffmpegPath: env.FFMPEG_PATH ?? 'ffmpeg',
     ffprobePath: env.FFPROBE_PATH ?? 'ffprobe',
     vadModelPath: env.VEH_VAD_MODEL ?? defaultVadModelPath(),
+    webDistDir: env.VEH_WEB_DIST ?? defaultWebDistDir(),
   };
   for (const dir of [config.projectDir, config.backupsDir, config.thumbsDir, config.vadDir]) {
     fs.mkdirSync(dir, { recursive: true });
