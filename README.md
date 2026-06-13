@@ -36,20 +36,27 @@
 | whisper-cli(whisper.cpp) | 文字起こし(使う場合のみ) |
 | silero_vad.onnx / ggml-*.bin | 解析モデル(下記コマンドで取得) |
 
-### プラットフォーム別セットアップ
+### ネイティブ依存(ffmpeg / whisper-cli)の用意
 
-**Windows(ネイティブ実行)**
-- `winget install ffmpeg`(または [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) の static ビルド+環境変数 `FFMPEG_PATH`/`FFPROBE_PATH`)
-- whisper.cpp は [リリースの Windows バイナリ](https://github.com/ggml-org/whisper.cpp/releases) を置いて `WHISPER_PATH` で指定
+**nix + direnv(推奨。Linux / macOS / WSL 共通)**
+- リポジトリに `flake.nix` を同梱しており、devShell に ffmpeg / whisper-cpp をピン留め済み
+- [direnv](https://direnv.net/) を使っていれば、プロジェクトに入った時点で自動でツールが PATH に入る:
+  ```bash
+  direnv allow   # 初回のみ。以後 cd するだけで ffmpeg / whisper-cli が有効
+  ```
+- direnv 無しでも `nix develop` で同じ環境に入れる
+- Node / pnpm は nix ではなく `.tool-versions`([mise](https://mise.jdx.dev/) / asdf)で管理
 
-**macOS**
-- `brew install ffmpeg whisper-cpp`(whisper-cli が入ります)
-- そのほかは共通手順のまま動きます。FCPXML の書き出しも POSIX パス(`/Volumes/...`)で正しく生成されます
-- 注意: クリップ ID は素材のパスから決まるため、**同じ素材でも Windows(`E:\...`)と macOS(`/Volumes/...`)ではプロジェクトデータを共有できません**(WSL ⇔ Windows 間は自動で同一 ID になります)
+**nix を使わない場合**
+- **macOS**: `brew install ffmpeg whisper-cpp`(whisper-cli が入ります)
+- **Windows(ネイティブ実行)**: `winget install ffmpeg`(または [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) の static ビルド)+ [whisper.cpp の Windows バイナリ](https://github.com/ggml-org/whisper.cpp/releases)。パスは `FFMPEG_PATH` / `FFPROBE_PATH` / `WHISPER_PATH` で指定
+- いずれも `ffmpeg` / `ffprobe` / `whisper-cli` が PATH にあれば既定設定のまま動きます
 
-**WSL(開発)**
-- home-manager の `home.packages` に `ffmpeg` / `whisper-cpp` を追加済み
-- メディアルートに Windows パス(`C:\...`)を入れても `/mnt/c/...` へ自動変換されます
+### プラットフォーム別の注意
+
+- **macOS**: FCPXML 書き出しは POSIX パス(`/Volumes/...`)で正しく生成されます
+- **WSL**: メディアルートに Windows パス(`C:\...`)を入れても `/mnt/c/...` へ自動変換されます
+- **クリップ ID は素材のパス由来**: 同じ素材でも Windows(`E:\...`)と macOS(`/Volumes/...`)ではプロジェクトデータを共有できません(WSL ⇔ Windows 間は自動で同一 ID になります)
 
 ## セットアップ
 
@@ -130,6 +137,12 @@ pnpm typecheck   # 全パッケージ型チェック
 pnpm test        # 全テスト(shared 13 / web 113 / server 191)
 pnpm build       # 全ビルド
 ```
+
+環境は **ネイティブツール(ffmpeg / whisper-cpp)を nix flake、ランタイム(Node / pnpm)を mise** で分担管理しています。
+
+- `flake.nix` / `flake.lock` — ffmpeg・whisper-cpp を nixpkgs の特定リビジョンにピン留め
+- `.envrc`(`use flake`)— direnv で devShell を自動ロード
+- `.tool-versions` — Node / pnpm のバージョン
 
 構成: pnpm workspace モノレポ
 

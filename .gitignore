@@ -3,6 +3,10 @@ dist/
 *.log
 *.tsbuildinfo
 
+# direnv / nix
+.direnv/
+result
+
 # プロジェクトデータ(メモ・キャッシュ)はリポジトリ外
 project-data/
 
