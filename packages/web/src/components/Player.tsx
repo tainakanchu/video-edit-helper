@@ -1,9 +1,14 @@
 import { useRef } from 'react';
 import { formatTime } from '@veh/shared';
 import { PLAYBACK_RATES } from '../lib/keyboard';
+import { formatGainPercent, isBoosting } from '../lib/audio';
 import { usePlayer } from './PlayerContext';
+import { AudioMeter } from './AudioMeter';
 import { useAppStore, projectSelections } from '../store/useAppStore';
 import { selectionsForClip } from '../lib/selection';
+
+/** 音量ブースト用プリセット(ゲイン倍率) */
+const GAIN_PRESETS = [1, 2, 4] as const;
 
 interface PlayerProps {
   /** ペンディング中のイン点(秒)。シークバーにマーカー表示 */
@@ -153,6 +158,76 @@ export function Player({ pendingInSec, sceneTimes }: PlayerProps) {
               {r}x
             </button>
           ))}
+        </div>
+
+        <div className="audio-controls">
+          <button
+            className="ghost mute-btn"
+            onClick={p.toggleMute}
+            aria-pressed={p.audioMuted}
+            title={p.audioMuted ? 'ミュート解除' : 'ミュート'}
+          >
+            {p.audioMuted ? '🔇' : '🔊'}
+          </button>
+
+          <input
+            type="range"
+            className="volume-slider"
+            min={0}
+            max={500}
+            step={5}
+            value={Math.round(p.audioGain * 100)}
+            onChange={(e) => p.setAudioGain(Number(e.target.value) / 100)}
+            aria-label="プレビュー音量"
+            title="プレビュー音量(100% 超はブースト。Shift+↑ / ↓ でも調整)"
+          />
+
+          <span
+            className={isBoosting(p.audioGain) ? 'vol-label boosting' : 'vol-label'}
+            title={isBoosting(p.audioGain) ? 'ブースト中(原音より増幅)' : undefined}
+          >
+            {formatGainPercent(p.audioGain)}
+            {isBoosting(p.audioGain) && <span className="boost-tag">ブースト中</span>}
+          </span>
+
+          <div className="gain-presets">
+            {GAIN_PRESETS.map((g) => (
+              <button
+                key={g}
+                className={Math.abs(p.audioGain - g) < 0.001 ? 'active' : ''}
+                onClick={() => p.setAudioGain(g)}
+                title={`音量を ${g * 100}% に`}
+              >
+                {g * 100}%
+              </button>
+            ))}
+          </div>
+
+          <AudioMeter getLevel={p.getAudioLevel} active={p.audioActive && !p.audioMuted} />
+
+          {p.setSinkSupported && (
+            <select
+              className="sink-select"
+              value={p.audioSinkId}
+              onChange={(e) => void p.setAudioSink(e.target.value)}
+              disabled={!p.audioActive}
+              title={
+                p.audioActive
+                  ? '音声出力デバイス'
+                  : '再生を開始すると出力デバイスを切り替えられます'
+              }
+              aria-label="音声出力デバイス"
+            >
+              <option value="">既定の出力</option>
+              {p.audioOutputs
+                .filter((d) => d.deviceId !== 'default' && d.deviceId !== '')
+                .map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label}
+                  </option>
+                ))}
+            </select>
+          )}
         </div>
 
         {anyProxyAvailable && (

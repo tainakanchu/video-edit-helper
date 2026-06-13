@@ -636,6 +636,10 @@ a {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.note-row .text.marker-placeholder {
+  color: var(--text-muted, #888);
+  font-style: italic;
+}
 .note-row .tags {
   display: flex;
   gap: 4px;
@@ -1312,6 +1316,105 @@ a {
   background: var(--accent-dim);
   border-color: var(--accent);
   color: #fff;
+}
+
+/* ---- プレビュー音声コントロール ---- */
+.audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.audio-controls .mute-btn {
+  padding: 2px 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+.audio-controls .volume-slider {
+  width: 110px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.audio-controls .vol-label {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  min-width: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* 100% を超えたら(ブースト中)数値ラベルをアンバー色に */
+.audio-controls .vol-label.boosting {
+  color: var(--status-progress);
+  font-weight: 600;
+}
+.audio-controls .vol-label .boost-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--status-progress) 22%, transparent);
+  color: var(--status-progress);
+  white-space: nowrap;
+}
+.audio-controls .gain-presets {
+  display: flex;
+  gap: 4px;
+}
+.audio-controls .gain-presets button {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.audio-controls .gain-presets button.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: #fff;
+}
+.audio-controls .sink-select {
+  font-size: 11px;
+  max-width: 130px;
+  padding: 2px 4px;
+}
+.audio-controls .sink-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* レベルメーター */
+.audio-meter {
+  position: relative;
+  width: 56px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.audio-meter.inactive {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.audio-meter-idle {
+  line-height: 1;
+}
+.audio-meter-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  border-radius: 4px 0 0 4px;
+  transition: width 60ms linear;
+  background: var(--status-reviewed);
+}
+.audio-meter-fill.mid {
+  background: var(--status-progress);
+}
+.audio-meter-fill.high {
+  background: var(--danger);
 }
 
 /* ---- SetupView チェックボックス行 ---- */

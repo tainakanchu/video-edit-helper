@@ -18,6 +18,7 @@ import {
 import { create } from 'zustand';
 import { api, ApiError } from '../api/client';
 import { promotionWindow } from '../lib/selection';
+import { clampGain } from '../lib/audio';
 
 export interface Toast {
   id: number;
@@ -40,6 +41,12 @@ interface AppState {
   helpOpen: boolean;
   /** 再生可能素材でもプロキシを優先再生するか(4K 直再生が重い場合のため。既定 OFF) */
   preferProxy: boolean;
+  /** プレビュー音量(ゲイン)。1.0 = 原音、最大 5.0(1.0 超は GainNode によるブースト) */
+  audioGain: number;
+  /** プレビュー音声のミュート状態(gain 0 相当) */
+  audioMuted: boolean;
+  /** 音声出力デバイス(setSinkId)の deviceId。空文字 = 既定デバイス */
+  audioSinkId: string;
   /** 選定タブで強調表示したい行(昇格直後など)。一度読まれたら null に戻して良い */
   highlightSelectionId: ID | null;
 
@@ -58,6 +65,13 @@ interface AppState {
   setHighlightSelection: (selectionId: ID | null) => void;
   toggleHelp: (open?: boolean) => void;
   setPreferProxy: (on: boolean) => void;
+
+  /** プレビュー音量(ゲイン)を 0〜5 にクランプして設定し localStorage に永続化 */
+  setAudioGain: (gain: number) => void;
+  /** プレビュー音声のミュートを切り替え(永続化) */
+  toggleMute: () => void;
+  /** 音声出力デバイスを設定(永続化) */
+  setAudioSinkId: (id: string) => void;
 
   saveSettings: (settings: Partial<ProjectSettings>) => Promise<void>;
   startScan: (mediaRoots?: string[]) => Promise<void>;
@@ -95,6 +109,44 @@ function errMessage(e: unknown): string {
   return '不明なエラーが発生しました';
 }
 
+// --- 音声設定の永続化(localStorage)。SSR / プライベートモードでも壊れないよう try/catch でガード ---
+const LS_AUDIO_GAIN = 'veh.audioGain';
+const LS_AUDIO_MUTED = 'veh.audioMuted';
+const LS_AUDIO_SINK = 'veh.audioSinkId';
+
+function lsGet(key: string): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function lsSet(key: string, value: string): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(key, value);
+  } catch {
+    // 保存失敗は無視(プライベートモード等)
+  }
+}
+
+function initialAudioGain(): number {
+  const raw = lsGet(LS_AUDIO_GAIN);
+  if (raw === null) return 1;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) ? clampGain(n) : 1;
+}
+
+function initialAudioMuted(): boolean {
+  return lsGet(LS_AUDIO_MUTED) === '1';
+}
+
+function initialAudioSinkId(): string {
+  return lsGet(LS_AUDIO_SINK) ?? '';
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   project: null,
   jobs: [],
@@ -105,6 +157,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedClipId: null,
   helpOpen: false,
   preferProxy: false,
+  audioGain: initialAudioGain(),
+  audioMuted: initialAudioMuted(),
+  audioSinkId: initialAudioSinkId(),
   highlightSelectionId: null,
 
   _jobTimer: null,
@@ -188,6 +243,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ helpOpen: open === undefined ? !s.helpOpen : open })),
 
   setPreferProxy: (on) => set({ preferProxy: on }),
+
+  setAudioGain: (gain) => {
+    const g = clampGain(gain);
+    set({ audioGain: g });
+    lsSet(LS_AUDIO_GAIN, String(g));
+  },
+
+  toggleMute: () =>
+    set((s) => {
+      const next = !s.audioMuted;
+      lsSet(LS_AUDIO_MUTED, next ? '1' : '0');
+      return { audioMuted: next };
+    }),
+
+  setAudioSinkId: (id) => {
+    set({ audioSinkId: id });
+    lsSet(LS_AUDIO_SINK, id);
+  },
 
   saveSettings: async (settings) => {
     try {
