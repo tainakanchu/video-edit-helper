@@ -1,10 +1,11 @@
 import { useAppStore, summarizeDay } from '../store/useAppStore'
 import { formatTime } from '@veh/shared'
+import { useRouter } from '../lib/useRouter'
 
 export function DayNav() {
   const project = useAppStore(s => s.project)
   const selectedDayId = useAppStore(s => s.selectedDayId)
-  const selectDay = useAppStore(s => s.selectDay)
+  const { navigate } = useRouter()
 
   if (project === null) return null
 
@@ -19,7 +20,7 @@ export function DayNav() {
           <button
             key={day.id}
             className={isActive ? 'day-item active' : 'day-item'}
-            onClick={() => selectDay(day.id)}
+            onClick={() => navigate({ name: 'day', dayId: day.id })}
           >
             <div className="day-title">
               <span className="day-name">Day {day.index}</span>

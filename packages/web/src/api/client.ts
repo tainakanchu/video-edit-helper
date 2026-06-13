@@ -3,6 +3,7 @@ import {
   type AddWatchedRequest,
   type ClipResponse,
   type CreateNoteRequest,
+  type CreateSelectionRequest,
   type EnqueueRequest,
   type EnqueueResponse,
   type ID,
@@ -12,8 +13,13 @@ import {
   type ReviewStatus,
   type ScanRequest,
   type ScanResponse,
+  type ScenesResponse,
+  type SearchResponse,
+  type SelectionResponse,
   type ThumbsResponse,
+  type TranscriptResponse,
   type UpdateNoteRequest,
+  type UpdateSelectionRequest,
   type UpdateSettingsRequest,
   type VadResponse,
 } from '@veh/shared';
@@ -109,9 +115,27 @@ export const api = {
 
   getVad: (clipId: ID) =>
     request<VadResponse | null>(apiPaths.clipVad(clipId), { allow404: true }),
+
+  createSelection: (clipId: ID, req: CreateSelectionRequest) =>
+    request<SelectionResponse>(apiPaths.clipSelections(clipId), { method: 'POST', body: req }),
+
+  updateSelection: (selectionId: ID, req: UpdateSelectionRequest) =>
+    request<SelectionResponse>(apiPaths.selection(selectionId), { method: 'PATCH', body: req }),
+
+  deleteSelection: (selectionId: ID) =>
+    request<void>(apiPaths.selection(selectionId), { method: 'DELETE' }),
+
+  getTranscript: (clipId: ID) =>
+    request<TranscriptResponse | null>(apiPaths.clipTranscript(clipId), { allow404: true }),
+
+  getScenes: (clipId: ID) =>
+    request<ScenesResponse | null>(apiPaths.clipScenes(clipId), { allow404: true }),
+
+  search: (query: string) => request<SearchResponse>(apiPaths.search(query)),
 };
 
 /** メディア / サムネイル画像 URL(<video> や <img> の src に直接渡す) */
 export const mediaUrl = (fileId: ID) => apiPaths.media(fileId);
+export const proxyUrl = (fileId: ID) => apiPaths.mediaProxy(fileId);
 export const thumbUrl = (clipId: ID, intervalSec: number, timeSec: number) =>
   apiPaths.thumbImage(clipId, intervalSec, timeSec);

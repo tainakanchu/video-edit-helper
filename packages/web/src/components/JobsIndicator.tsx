@@ -8,6 +8,9 @@ function jobTypeLabel(type: string): string {
     case 'thumbs-coarse': return 'サムネ(粗)'
     case 'thumbs-fine': return 'サムネ(密)'
     case 'vad': return '発話解析'
+    case 'proxy': return 'プロキシ生成'
+    case 'scenes': return 'シーン解析'
+    case 'whisper': return '文字起こし'
     default: return type
   }
 }

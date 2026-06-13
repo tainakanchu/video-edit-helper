@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import type { Clip, ID } from '@veh/shared'
-import { formatTime } from '@veh/shared'
+import type { Clip, ExportFormat, ID } from '@veh/shared'
+import { apiPaths, formatTime } from '@veh/shared'
 import { useAppStore, summarizeDay, clipCoverage, notesForClip } from '../store/useAppStore'
 import { thumbUrl } from '../api/client'
+import { useRouter } from '../lib/useRouter'
 
 interface ClipCardProps {
   clip: Clip
@@ -60,10 +61,18 @@ function ClipCard({ clip, coarseIntervalSec, noteCount, onOpen }: ClipCardProps)
   )
 }
 
+const EXPORT_LABELS: Record<ExportFormat, string> = {
+  fcpxml: 'FCPXML',
+  csv: 'CSV',
+  md: 'MD',
+}
+
 export function DayView() {
   const project = useAppStore(s => s.project)
   const selectedDayId = useAppStore(s => s.selectedDayId)
-  const openClip = useAppStore(s => s.openClip)
+  const enqueue = useAppStore(s => s.enqueue)
+  const toast = useAppStore(s => s.toast)
+  const { navigate } = useRouter()
 
   if (project === null) {
     return <div className="dayview"><p>Day を選択してください</p></div>
@@ -80,6 +89,38 @@ export function DayView() {
   const summary = summarizeDay(project, day.id)
   const coarseIntervalSec = project.settings.thumbCoarseIntervalSec
   const coveragePct = Math.round(summary.coverage * 100)
+  const selectionTotalMin = Math.round(summary.selectionTotalSec / 60)
+  const hasSelections = summary.selectionCount > 0
+
+  const handleTranscribeDay = () => {
+    const n = day.clipIds.length
+    if (n === 0) return
+    if (
+      window.confirm(
+        `CPU で時間がかかります。${n} クリップを夜間バッチに投入しますか?`,
+      )
+    ) {
+      void enqueue('whisper', day.clipIds.slice())
+      toast(`${n} クリップを文字起こしキューに投入しました`, 'info')
+    }
+  }
+
+  const handleProxyDay = () => {
+    const n = day.clipIds.length
+    if (n === 0) return
+    const allFiles = project.settings.proxyAllFiles
+    const note = allFiles
+      ? '設定により全ファイルが対象です。'
+      : '設定により再生不可素材のみが対象です。'
+    if (
+      window.confirm(
+        `この日の ${n} クリップのプロキシ生成を投入しますか?\n${note}`,
+      )
+    ) {
+      void enqueue('proxy', day.clipIds.slice())
+      toast(`${n} クリップをプロキシ生成キューに投入しました`, 'info')
+    }
+  }
 
   return (
     <div className="dayview">
@@ -87,6 +128,46 @@ export function DayView() {
         <h1>Day {day.index}</h1>
         <div className="sub">
           {day.date} / {summary.clipCount}本 / {formatTime(summary.totalDurationSec)} / カバレッジ {coveragePct}%
+          {' / '}選定 {summary.selectionCount}{selectionTotalMin > 0 ? `(計${selectionTotalMin}分)` : ''}
+        </div>
+        <span className="spacer" style={{ flex: 1 }} />
+        <div className="day-actions">
+          <button
+            className="primary"
+            onClick={() => navigate({ name: 'triage', dayId: day.id })}
+            disabled={summary.openNoteCount === 0}
+            title={summary.openNoteCount === 0 ? '未処理の付箋はありません' : '未処理の付箋を順に処理'}
+          >
+            トリアージ (残り {summary.openNoteCount})
+          </button>
+          <button onClick={handleTranscribeDay} title="この Day の全クリップを文字起こしキューに投入">
+            この日を文字起こし
+          </button>
+          <button
+            onClick={handleProxyDay}
+            title="この Day の素材のプロキシを生成(対象は全ファイルプロキシ設定に従う)"
+          >
+            プロキシ生成(この日)
+          </button>
+          <div className="export-group" title={hasSelections ? '' : '選定が無いため書き出せません'}>
+            <span className="exp-label">書き出し:</span>
+            {(Object.keys(EXPORT_LABELS) as ExportFormat[]).map(fmt =>
+              hasSelections ? (
+                <a
+                  key={fmt}
+                  className="exp-btn"
+                  href={apiPaths.dayExport(day.id, fmt)}
+                  download
+                >
+                  {EXPORT_LABELS[fmt]}
+                </a>
+              ) : (
+                <span key={fmt} className="exp-btn disabled" aria-disabled="true">
+                  {EXPORT_LABELS[fmt]}
+                </span>
+              ),
+            )}
+          </div>
         </div>
       </div>
       <div className="clip-grid">
@@ -99,7 +180,7 @@ export function DayView() {
               clip={clip}
               coarseIntervalSec={coarseIntervalSec}
               noteCount={notesForClip(project, clipId).length}
-              onOpen={() => openClip(clipId)}
+              onOpen={() => navigate({ name: 'clip', clipId, t: null })}
             />
           )
         })}

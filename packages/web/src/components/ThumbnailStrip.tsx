@@ -1,16 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, thumbUrl } from '../api/client';
 import { usePlayer } from './PlayerContext';
-import { useAppStore, notesForClip } from '../store/useAppStore';
+import { useAppStore, notesForClip, projectSelections } from '../store/useAppStore';
 import {
   computeVisibleRange,
   indexToOffset,
   timeToIndex,
   scrollToCenter,
 } from '../lib/thumbStrip';
+import { selectionsForClip } from '../lib/selection';
 import type { ThumbManifest } from '@veh/shared';
 
-export function ThumbnailStrip() {
+interface ThumbnailStripProps {
+  /** ペンディング中のイン点(秒)。ストリップにマーカー表示 */
+  pendingInSec?: number | null;
+  /** シーン転換点(秒)。ストリップに細い縦線で表示 */
+  sceneTimes?: number[] | null;
+}
+
+export function ThumbnailStrip({ pendingInSec, sceneTimes }: ThumbnailStripProps) {
   const p = usePlayer();
   const project = useAppStore(s => s.project);
   const toast = useAppStore(s => s.toast);
@@ -119,6 +127,7 @@ export function ThumbnailStrip() {
 
   const notes = project ? notesForClip(project, p.clip.id) : [];
   const visibleNotes = notes.filter(n => n.status !== 'discarded');
+  const selections = project ? selectionsForClip(projectSelections(project), p.clip.id) : [];
 
   const thumbs: React.ReactNode[] = [];
   for (let i = startIndex; i < endIndex; i++) {
@@ -178,6 +187,41 @@ export function ThumbnailStrip() {
               }}
             />
           ))}
+          {selections.map(s => (
+            <div
+              key={s.id}
+              className="sel-bar"
+              style={{
+                left: (s.inSec / p.totalSec) * spacerWidth,
+                width: ((s.outSec - s.inSec) / p.totalSec) * spacerWidth,
+                position: 'absolute',
+              }}
+              title={`選定 ${s.inSec.toFixed(0)}–${s.outSec.toFixed(0)}s`}
+            />
+          ))}
+          {pendingInSec != null && (
+            <div
+              className="in-mark-strip"
+              style={{
+                left: (pendingInSec / p.totalSec) * spacerWidth,
+                position: 'absolute',
+              }}
+              title="イン点(ペンディング)"
+            />
+          )}
+          {sceneTimes?.map((t, idx) =>
+            t > 0 && t < p.totalSec ? (
+              <div
+                key={`scene-${idx}`}
+                className="scene-mark-strip"
+                style={{
+                  left: (t / p.totalSec) * spacerWidth,
+                  position: 'absolute',
+                }}
+                title="シーン転換"
+              />
+            ) : null,
+          )}
         </div>
       </div>
     </div>

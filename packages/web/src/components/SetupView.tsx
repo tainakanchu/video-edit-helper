@@ -22,6 +22,7 @@ export function SetupView() {
   const [thumbFineIntervalSec, setThumbFineIntervalSec] = useState<string>(
     String(initSettings.thumbFineIntervalSec)
   )
+  const [proxyAllFiles, setProxyAllFiles] = useState<boolean>(initSettings.proxyAllFiles)
 
   const scanJob = jobs.find(
     j => j.type === 'scan' && (j.status === 'running' || j.status === 'queued')
@@ -38,6 +39,7 @@ export function SetupView() {
       dayStartHour: isNaN(dsh) ? defaultSettings.dayStartHour : dsh,
       thumbCoarseIntervalSec: isNaN(tci) ? defaultSettings.thumbCoarseIntervalSec : tci,
       thumbFineIntervalSec: isNaN(tfi) ? defaultSettings.thumbFineIntervalSec : tfi,
+      proxyAllFiles,
     }
   }
 
@@ -132,6 +134,18 @@ export function SetupView() {
             onChange={e => setThumbFineIntervalSec(e.target.value)}
             disabled={scanning}
           />
+        </label>
+      </div>
+
+      <div className="field-row check-row">
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={proxyAllFiles}
+            onChange={e => setProxyAllFiles(e.target.checked)}
+            disabled={scanning}
+          />
+          再生可能な素材も含め全ファイルのプロキシを生成(4K 素材が重い場合に)
         </label>
       </div>
 

@@ -6,14 +6,20 @@ import { parseTags } from '../lib/keyboard';
 
 interface NotesPanelProps {
   registerFocus: (focus: () => void) => void;
+  /** 付箋を選定へ昇格したときに呼ぶ(親が選定タブへ切り替える) */
+  onPromoted?: () => void;
 }
 
-export function NotesPanel({ registerFocus }: NotesPanelProps) {
+export function NotesPanel({ registerFocus, onPromoted }: NotesPanelProps) {
   const p = usePlayer();
   const project = useAppStore(s => s.project);
   const addNote = useAppStore(s => s.addNote);
   const updateNote = useAppStore(s => s.updateNote);
   const deleteNote = useAppStore(s => s.deleteNote);
+  const promoteNote = useAppStore(s => s.promoteNote);
+  const discardNote = useAppStore(s => s.discardNote);
+  const setHighlightSelection = useAppStore(s => s.setHighlightSelection);
+  const toast = useAppStore(s => s.toast);
 
   const notes = project ? notesForClip(project, p.clip.id) : [];
 
@@ -46,11 +52,20 @@ export function NotesPanel({ registerFocus }: NotesPanelProps) {
   };
 
   const handleDiscard = async (noteId: string) => {
-    await updateNote(noteId, { status: 'discarded' });
+    await discardNote(noteId);
   };
 
   const handleRestore = async (noteId: string) => {
     await updateNote(noteId, { status: 'open' });
+  };
+
+  const handlePromote = async (noteId: string) => {
+    const sel = await promoteNote(noteId);
+    if (sel) {
+      toast('付箋を選定に昇格しました', 'info');
+      setHighlightSelection(sel.id);
+      onPromoted?.();
+    }
   };
 
   const handleEdit = (note: { id: string; text: string; tags: string[] }) => {
@@ -115,13 +130,24 @@ export function NotesPanel({ registerFocus }: NotesPanelProps) {
                     ))}
                   </div>
                   <div className="acts">
-                    {note.status !== 'discarded' ? (
-                      <button onClick={() => handleDiscard(note.id)}>破棄</button>
+                    {note.status === 'discarded' ? (
+                      <button onClick={() => handleRestore(note.id)}>戻す</button>
                     ) : (
-                      <button onClick={() => handleRestore(note.id)}>復活</button>
+                      <>
+                        {note.status === 'open' && (
+                          <button
+                            className="promote"
+                            onClick={() => handlePromote(note.id)}
+                            title="この付箋を範囲選定に昇格"
+                          >
+                            昇格
+                          </button>
+                        )}
+                        <button onClick={() => handleDiscard(note.id)}>破棄</button>
+                        <button onClick={() => handleEdit(note)}>編集</button>
+                        <button onClick={() => handleDelete(note.id)}>削除</button>
+                      </>
                     )}
-                    <button onClick={() => handleEdit(note)}>編集</button>
-                    <button onClick={() => handleDelete(note.id)}>削除</button>
                   </div>
                 </>
               )}
