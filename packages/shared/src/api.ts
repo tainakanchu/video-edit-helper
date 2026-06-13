@@ -1,5 +1,6 @@
 import type {
   Clip,
+  ExportFormat,
   ID,
   JobInfo,
   JobType,
@@ -8,8 +9,12 @@ import type {
   ProjectSettings,
   ProjectState,
   ReviewStatus,
+  SceneList,
+  SearchResultItem,
+  Selection,
   ThumbManifest,
   TimeRange,
+  Transcript,
   VadResult,
 } from './types.js';
 
@@ -20,6 +25,7 @@ export const defaultSettings: ProjectSettings = {
   dayStartHour: 4,
   thumbCoarseIntervalSec: 60,
   thumbFineIntervalSec: 10,
+  proxyAllFiles: false,
 };
 
 /**
@@ -55,6 +61,20 @@ export const apiPaths = {
   clipVad: (clipId: ID) => `/api/clips/${clipId}/vad`,
   /** GET → video/mp4(Range 対応ストリーミング) */
   media: (fileId: ID) => `/api/media/${fileId}`,
+  /** GET → video/mp4(軽量プロキシ。Range 対応。未生成は 404) */
+  mediaProxy: (fileId: ID) => `/api/media/${fileId}/proxy`,
+  /** POST CreateSelectionRequest → SelectionResponse */
+  clipSelections: (clipId: ID) => `/api/clips/${clipId}/selections`,
+  /** PATCH UpdateSelectionRequest → SelectionResponse / DELETE → 204(昇格元付箋は open に戻す) */
+  selection: (selectionId: ID) => `/api/selections/${selectionId}`,
+  /** GET ?format=fcpxml|csv|md → ファイルダウンロード(Day のラフカット書き出し) */
+  dayExport: (dayId: ID, format: ExportFormat) => `/api/days/${dayId}/export?format=${format}`,
+  /** GET → TranscriptResponse(未生成は 404) */
+  clipTranscript: (clipId: ID) => `/api/clips/${clipId}/transcript`,
+  /** GET → ScenesResponse(未生成は 404) */
+  clipScenes: (clipId: ID) => `/api/clips/${clipId}/scenes`,
+  /** GET ?q=... → SearchResponse(メモ・選定・文字起こしの横断検索) */
+  search: (query: string) => `/api/search?q=${encodeURIComponent(query)}`,
 } as const;
 
 export interface ProjectResponse {
@@ -123,6 +143,42 @@ export interface ThumbsResponse {
 
 export interface VadResponse {
   vad: VadResult;
+}
+
+export interface CreateSelectionRequest {
+  inSec: number;
+  outSec: number;
+  text?: string;
+  tags?: string[];
+  rating?: 0 | 1 | 2 | 3;
+  /** 付箋からの昇格時に指定。該当付箋を promoted に更新する */
+  noteId?: ID;
+}
+
+export interface UpdateSelectionRequest {
+  inSec?: number;
+  outSec?: number;
+  text?: string;
+  tags?: string[];
+  rating?: 0 | 1 | 2 | 3;
+  orderKey?: number | null;
+}
+
+export interface SelectionResponse {
+  selection: Selection;
+}
+
+export interface TranscriptResponse {
+  transcript: Transcript;
+}
+
+export interface ScenesResponse {
+  scenes: SceneList;
+}
+
+export interface SearchResponse {
+  query: string;
+  results: SearchResultItem[];
 }
 
 export interface ErrorResponse {
