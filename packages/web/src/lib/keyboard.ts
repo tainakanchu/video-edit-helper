@@ -34,19 +34,22 @@ export interface ShortcutHelp {
   desc: string;
 }
 
-/** HelpOverlay 用のショートカット一覧(日本語) */
+/** HelpOverlay 用のショートカット一覧(日本語。DaVinci Resolve 寄りの割り当て) */
 export const SHORTCUTS: ShortcutHelp[] = [
   { keys: 'Space / K', desc: '再生 / 一時停止' },
-  { keys: 'J', desc: '再生速度を一段下げる' },
-  { keys: 'L', desc: '再生速度を一段上げる' },
+  { keys: 'J / L', desc: '再生速度を一段下げる / 上げる' },
+  { keys: ', / .', desc: '1 秒戻る / 進む(微調整)' },
   { keys: '← / →', desc: '10 秒戻る / 進む' },
   { keys: 'Shift + ← / →', desc: '1 分戻る / 進む' },
+  { keys: 'Home / End', desc: 'クリップ先頭 / 末尾へ' },
+  { keys: 'M', desc: '現在位置にマーカーを打つ(ラフ・即時)' },
+  { keys: '↑ / ↓', desc: '前 / 次のマーカーへジャンプ' },
+  { keys: 'N', desc: 'メモを書いて追加(テキスト入力)' },
   { keys: 'I', desc: '現在位置をイン点に(範囲選定)' },
   { keys: 'O', desc: 'アウト点を打って選定を作成' },
-  { keys: 'N', desc: '現在位置に付箋を追加' },
+  { keys: '[ / ]', desc: '前 / 次のシーンへジャンプ(シーン解析済みの場合)' },
   { keys: 'R', desc: 'レビュー状態を循環(未確認 → 確認中 → 確認済み)' },
-  { keys: '[', desc: '前のシーンへジャンプ(シーン解析済みの場合)' },
-  { keys: ']', desc: '次のシーンへジャンプ(シーン解析済みの場合)' },
+  { keys: 'Shift + ↑ / ↓', desc: 'プレビュー音量を上げる / 下げる(100% 超はブースト)' },
   { keys: '?', desc: 'このヘルプを開閉' },
   { keys: 'Esc', desc: 'イン点解除 / オーバーレイを閉じる / 一覧へ戻る' },
 ];

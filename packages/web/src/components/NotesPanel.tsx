@@ -99,7 +99,9 @@ export function NotesPanel({ registerFocus, onPromoted }: NotesPanelProps) {
       </div>
       <div className="list">
         {notes.length === 0 ? (
-          <div className="empty">まだ付箋はありません。N キーで現在位置に追加できます</div>
+          <div className="empty">
+            まだ付箋はありません。M でマーカー、N でメモを現在位置に追加できます
+          </div>
         ) : (
           notes.map(note => (
             <div
@@ -123,7 +125,9 @@ export function NotesPanel({ registerFocus, onPromoted }: NotesPanelProps) {
                 </div>
               ) : (
                 <>
-                  <div className="text">{note.text}</div>
+                  <div className={note.text ? 'text' : 'text marker-placeholder'}>
+                    {note.text || '(マーカー)'}
+                  </div>
                   <div className="tags">
                     {note.tags.map(tag => (
                       <span key={tag} className="tag-chip">#{tag}</span>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatTime, type ID } from '@veh/shared';
 import { isEditableTarget, rateDown, rateUp, SKIP_LARGE, SKIP_SMALL } from '../lib/keyboard';
 import { nextSceneTime, prevSceneTime } from '../lib/sceneNav';
+import { nextMarkerTime, prevMarkerTime } from '../lib/markerNav';
 import { PlayerProvider, usePlayer } from './PlayerContext';
 import { Player } from './Player';
 import { ThumbnailStrip } from './ThumbnailStrip';
@@ -11,7 +12,7 @@ import { SelectionsPanel } from './SelectionsPanel';
 import { TranscriptPanel } from './TranscriptPanel';
 import { HelpOverlay } from './HelpOverlay';
 import { ReviewToggle } from './ReviewToggle';
-import { useAppStore } from '../store/useAppStore';
+import { useAppStore, notesForClip } from '../store/useAppStore';
 import { useRouter } from '../lib/useRouter';
 import { api } from '../api/client';
 
@@ -49,6 +50,8 @@ function ClipViewInner() {
   const day = days.find((d) => d.id === clip.dayId);
   const cycleReview = useAppStore((s) => s.cycleReview);
   const createSelection = useAppStore((s) => s.createSelection);
+  const addNote = useAppStore((s) => s.addNote);
+  const project = useAppStore((s) => s.project);
   const enqueue = useAppStore((s) => s.enqueue);
   const jobs = useAppStore((s) => s.jobs);
   const helpOpen = useAppStore((s) => s.helpOpen);
@@ -120,6 +123,18 @@ function ClipViewInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenesActive]);
 
+  // マーカー(付箋)時刻の昇順リスト。↑ / ↓ のジャンプ先計算に使う
+  const markerTimes = project ? notesForClip(project, clip.id).map((n) => n.timeSec) : [];
+  const markerTimesRef = useRef<number[]>(markerTimes);
+  markerTimesRef.current = markerTimes;
+
+  /** M: 現在位置にラフなマーカー(空テキストの付箋)を即時に打つ */
+  const addMarker = async () => {
+    const at = p.virtualTimeSec;
+    const note = await addNote(clip.id, at, '', []);
+    if (note) toast(`マーカーを追加 ${formatTime(at)}`, 'info');
+  };
+
   const markIn = () => {
     setPendingIn(p.virtualTimeSec);
   };
@@ -166,6 +181,14 @@ function ClipViewInner() {
           e.preventDefault();
           p.setRate(rateUp(p.rate));
           break;
+        case ',':
+          e.preventDefault();
+          p.seekBy(-1);
+          break;
+        case '.':
+          e.preventDefault();
+          p.seekBy(1);
+          break;
         case 'ArrowLeft':
           e.preventDefault();
           p.seekBy(-(e.shiftKey ? SKIP_LARGE : SKIP_SMALL));
@@ -173,6 +196,37 @@ function ClipViewInner() {
         case 'ArrowRight':
           e.preventDefault();
           p.seekBy(e.shiftKey ? SKIP_LARGE : SKIP_SMALL);
+          break;
+        case 'Home':
+          e.preventDefault();
+          p.seekTo(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          p.seekTo(p.totalSec);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          if (e.shiftKey) {
+            p.nudgeGain(0.25); // Shift+↑ = 音量アップ
+          } else {
+            const prev = prevMarkerTime(markerTimesRef.current, p.virtualTimeSec);
+            if (prev !== null) p.seekTo(prev); // ↑ = 前のマーカーへ
+          }
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          if (e.shiftKey) {
+            p.nudgeGain(-0.25); // Shift+↓ = 音量ダウン
+          } else {
+            const next = nextMarkerTime(markerTimesRef.current, p.virtualTimeSec);
+            if (next !== null) p.seekTo(next); // ↓ = 次のマーカーへ
+          }
+          break;
+        case 'm':
+        case 'M':
+          e.preventDefault();
+          void addMarker(); // M = マーカーを打つ(DaVinci / Edius)
           break;
         case 'i':
         case 'I':
