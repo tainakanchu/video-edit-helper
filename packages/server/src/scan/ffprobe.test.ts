@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseFrameRate, parseProbeJson } from './ffprobe.js';
+import { parseFrameRate, parseIso6709, parseProbeJson } from './ffprobe.js';
 
 describe('parseFrameRate', () => {
   it('分数表記を数値化する', () => {
@@ -13,6 +13,41 @@ describe('parseFrameRate', () => {
   });
   it('undefined は null', () => {
     expect(parseFrameRate(undefined)).toBeNull();
+  });
+});
+
+describe('parseIso6709', () => {
+  it('2D(緯度経度のみ)をパースする', () => {
+    expect(parseIso6709('+35.0421+135.7556/')).toEqual({ lat: 35.0421, lon: 135.7556 });
+  });
+  it('3D(高度付き)は緯度経度の先頭 2 つを取る', () => {
+    expect(parseIso6709('+35.0421+135.7556+22.9/')).toEqual({ lat: 35.0421, lon: 135.7556 });
+  });
+  it('CRS 付きでも緯度経度を取り出す', () => {
+    expect(parseIso6709('+35.0421+135.7556+022.900CRSWGS_84/')).toEqual({
+      lat: 35.0421,
+      lon: 135.7556,
+    });
+  });
+  it('負の経度(西半球)', () => {
+    expect(parseIso6709('+40.7128-074.0060/')).toEqual({ lat: 40.7128, lon: -74.006 });
+  });
+  it('不正な文字列は null', () => {
+    expect(parseIso6709('not-a-location')).toBeNull();
+  });
+  it('数値が 1 つだけなら null', () => {
+    expect(parseIso6709('+35.0421/')).toBeNull();
+  });
+  it('範囲外(緯度 > 90)は null', () => {
+    expect(parseIso6709('+95.0000+135.7556/')).toBeNull();
+  });
+  it('範囲外(経度 < -180)は null', () => {
+    expect(parseIso6709('+35.0421-200.0000/')).toBeNull();
+  });
+  it('空文字 / null / undefined は null', () => {
+    expect(parseIso6709('')).toBeNull();
+    expect(parseIso6709(null)).toBeNull();
+    expect(parseIso6709(undefined)).toBeNull();
   });
 });
 
@@ -40,6 +75,23 @@ describe('parseProbeJson', () => {
     expect(meta.durationSec).toBeCloseTo(123.45);
     expect(meta.playableInBrowser).toBe(true);
     expect(meta.createdAt).toBe('2025-01-01T10:00:00.000Z');
+    expect(meta.gps).toBeNull();
+  });
+
+  it('location タグから gps を抽出する', () => {
+    const meta = parseProbeJson({
+      streams: [{ codec_type: 'video', codec_name: 'h264' }],
+      format: { duration: '10', tags: { location: '+35.0421+135.7556/' } },
+    });
+    expect(meta.gps).toEqual({ lat: 35.0421, lon: 135.7556 });
+  });
+
+  it('location-eng タグからも gps を抽出する', () => {
+    const meta = parseProbeJson({
+      streams: [{ codec_type: 'video', codec_name: 'h264' }],
+      format: { duration: '10', tags: { 'location-eng': '+12.3456+098.7654/' } },
+    });
+    expect(meta.gps).toEqual({ lat: 12.3456, lon: 98.7654 });
   });
 
   it('hevc は playableInBrowser=false', () => {

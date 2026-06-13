@@ -168,3 +168,114 @@ describe('addWatchedRanges 昇格', () => {
     expect(store.getClip('c1')!.reviewStatus).toBe('reviewed');
   });
 });
+
+describe('selections マイグレーション', () => {
+  it('selections が無い旧 project.json をロードすると {} で初期化される', () => {
+    // selections フィールドを持たない旧形式を直接書き込む
+    const legacy = {
+      version: 1,
+      settings: { mediaRoots: [], dayStartHour: 4, thumbCoarseIntervalSec: 60, thumbFineIntervalSec: 10 },
+      days: [],
+      clips: {},
+      notes: {},
+    };
+    fs.writeFileSync(projectFile, JSON.stringify(legacy));
+    const store = newStore();
+    expect(store.getState().selections).toEqual({});
+    expect(store.getAllSelections()).toHaveLength(0);
+  });
+
+  it('新規ロード時も selections は {} で存在する', () => {
+    const store = newStore();
+    expect(store.getState().selections).toEqual({});
+  });
+});
+
+describe('Selection CRUD', () => {
+  it('createSelection はデフォルト rating 0 / orderKey null', () => {
+    const store = newStore();
+    store.replaceScanResult([day], [mkClip('c1')]);
+    const sel = store.createSelection('c1', { inSec: 5, outSec: 10 });
+    expect(sel.rating).toBe(0);
+    expect(sel.orderKey).toBeNull();
+    expect(sel.noteId).toBeNull();
+    expect(sel.text).toBe('');
+    expect(store.getSelection(sel.id)).toBeDefined();
+    expect(store.getSelectionsForClip('c1')).toHaveLength(1);
+  });
+
+  it('noteId 付き createSelection は付箋を promoted に更新', () => {
+    const store = newStore();
+    store.replaceScanResult([day], [mkClip('c1')]);
+    const note = store.createNote('c1', 5, 'メモ', []);
+    const sel = store.createSelection('c1', { inSec: 5, outSec: 10, noteId: note.id });
+    expect(sel.noteId).toBe(note.id);
+    expect(store.getState().notes[note.id]!.status).toBe('promoted');
+  });
+
+  it('updateSelection は指定フィールドのみ更新', () => {
+    const store = newStore();
+    store.replaceScanResult([day], [mkClip('c1')]);
+    const sel = store.createSelection('c1', { inSec: 5, outSec: 10, rating: 1 });
+    const updated = store.updateSelection(sel.id, { rating: 3, orderKey: 2.5 });
+    expect(updated!.rating).toBe(3);
+    expect(updated!.orderKey).toBe(2.5);
+    expect(updated!.inSec).toBe(5);
+  });
+
+  it('deleteSelection は promoted な付箋を open に戻す', () => {
+    const store = newStore();
+    store.replaceScanResult([day], [mkClip('c1')]);
+    const note = store.createNote('c1', 5, 'メモ', []);
+    const sel = store.createSelection('c1', { inSec: 5, outSec: 10, noteId: note.id });
+    expect(store.getState().notes[note.id]!.status).toBe('promoted');
+    expect(store.deleteSelection(sel.id)).toBe(true);
+    expect(store.getState().notes[note.id]!.status).toBe('open');
+    expect(store.getSelection(sel.id)).toBeUndefined();
+  });
+
+  it('deleteSelection: discarded な付箋は戻さない(promoted のみ open へ)', () => {
+    const store = newStore();
+    store.replaceScanResult([day], [mkClip('c1')]);
+    const note = store.createNote('c1', 5, 'メモ', []);
+    const sel = store.createSelection('c1', { inSec: 5, outSec: 10, noteId: note.id });
+    // 付箋を手動で discarded にしておく
+    store.updateNote(note.id, { status: 'discarded' });
+    store.deleteSelection(sel.id);
+    expect(store.getState().notes[note.id]!.status).toBe('discarded');
+  });
+
+  it('再スキャンしても selections は保持される', () => {
+    const store = newStore();
+    store.replaceScanResult([day], [mkClip('c1')]);
+    const sel = store.createSelection('c1', { inSec: 5, outSec: 10 });
+    store.replaceScanResult([day], [mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
+    expect(store.getSelection(sel.id)).toBeDefined();
+  });
+});
+
+describe('proxyAvailable 永続化', () => {
+  it('setProxyAvailable がファイルのフラグを立てる', () => {
+    const store = newStore();
+    store.replaceScanResult([day], [mkClip('c1')]);
+    const fileId = store.getClip('c1')!.files[0]!.id;
+    expect(store.setProxyAvailable(fileId, true)).toBe(true);
+    expect(store.getClip('c1')!.files[0]!.proxyAvailable).toBe(true);
+  });
+
+  it('未知 fileId は false', () => {
+    const store = newStore();
+    store.replaceScanResult([day], [mkClip('c1')]);
+    expect(store.setProxyAvailable('nope', true)).toBe(false);
+  });
+
+  it('再スキャンで同一 fileId の proxyAvailable は引き継がれる', () => {
+    const store = newStore();
+    store.replaceScanResult([day], [mkClip('c1')]);
+    const fileId = store.getClip('c1')!.files[0]!.id;
+    store.setProxyAvailable(fileId, true);
+    // 再スキャン: 同じ fileId だが proxyAvailable 未設定の新規 Clip
+    store.replaceScanResult([day], [mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
+    expect(store.getClip('c1')!.files[0]!.proxyAvailable).toBe(true);
+  });
+});

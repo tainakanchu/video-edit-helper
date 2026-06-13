@@ -5,12 +5,15 @@ const MAX_CONCURRENCY = 2;
 const HISTORY_LIMIT = 200;
 const PROGRESS_THROTTLE_MS = 500;
 
-/** 優先度(小さいほど先): scan > thumbs-coarse > vad > thumbs-fine */
+/** 優先度(小さいほど先): scan > thumbs-coarse > vad > thumbs-fine > proxy > scenes > whisper */
 const PRIORITY: Record<JobType, number> = {
   scan: 0,
   'thumbs-coarse': 1,
   vad: 2,
   'thumbs-fine': 3,
+  proxy: 4,
+  scenes: 5,
+  whisper: 6,
 };
 
 /** ジョブ実行時に渡されるコンテキスト */

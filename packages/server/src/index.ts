@@ -7,6 +7,7 @@ import { loadConfig } from './config.js';
 import { ProjectStore } from './store/projectStore.js';
 import { JobQueue } from './jobs/queue.js';
 import { JobCoordinator } from './jobs/coordinator.js';
+import { TranscriptCache } from './search/transcriptCache.js';
 import { registerRoutes } from './routes/api.js';
 
 async function main(): Promise<void> {
@@ -17,11 +18,15 @@ async function main(): Promise<void> {
   });
   const queue = new JobQueue();
   const coordinator = new JobCoordinator(config, store, queue);
+  const transcriptCache = new TranscriptCache(config);
+  coordinator.setTranscriptCache(transcriptCache);
+  // 起動時にプロキシディレクトリと突き合わせて proxyAvailable を再同期
+  coordinator.syncProxyFlags();
 
   const app = Fastify({ logger: true, bodyLimit: 5 * 1024 * 1024 });
   await app.register(cors, { origin: true });
 
-  registerRoutes(app, { config, store, queue, coordinator });
+  registerRoutes(app, { config, store, queue, coordinator, transcriptCache });
 
   // ビルド済み Web UI があれば同一ポートで静的配信(pnpm start 一発で全部起動)
   if (fs.existsSync(path.join(config.webDistDir, 'index.html'))) {

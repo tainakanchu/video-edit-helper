@@ -15,6 +15,7 @@ const settings: ProjectSettings = {
   dayStartHour: 4,
   thumbCoarseIntervalSec: 60,
   thumbFineIntervalSec: 10,
+  proxyAllFiles: false,
 };
 
 const GB = 1024 * 1024 * 1024;
@@ -33,6 +34,7 @@ function file(p: Partial<ProbedFile> & { path: string; fileName: string }): Prob
     audioCodec: 'aac',
     fps: 30,
     playableInBrowser: true,
+    gps: null,
     ...p,
   };
 }
@@ -226,6 +228,38 @@ describe('⑦ 複数カメラ混在の Day 内時系列ソート', () => {
       '2025-01-01T10:00:00.000Z',
       '2025-01-01T11:00:00.000Z',
     ]);
+  });
+});
+
+describe('Clip.gps(代表撮影位置)', () => {
+  it('GPS を持つ最初のファイルの値をクリップに反映する', () => {
+    const files = [
+      file({
+        path: '/media/cam/G_0001.MP4',
+        fileName: 'G_0001.MP4',
+        sizeBytes: 3 * GB,
+        durationSec: 600,
+        gps: null,
+      }),
+      file({
+        path: '/media/cam/G_0002.MP4',
+        fileName: 'G_0002.MP4',
+        sizeBytes: 3 * GB,
+        durationSec: 600,
+        gps: { lat: 35.0421, lon: 135.7556 },
+      }),
+    ];
+    const { clips } = buildDaysAndClips(files, settings);
+    expect(clips).toHaveLength(1);
+    expect(clips[0]!.gps).toEqual({ lat: 35.0421, lon: 135.7556 });
+  });
+
+  it('全ファイルが GPS を持たなければ null', () => {
+    const files = [
+      file({ path: '/media/cam/H_0001.MP4', fileName: 'H_0001.MP4', gps: null }),
+    ];
+    const { clips } = buildDaysAndClips(files, settings);
+    expect(clips[0]!.gps).toBeNull();
   });
 });
 

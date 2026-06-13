@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import type { Clip, Day, ID, ProjectSettings, SourceFile } from '@veh/shared';
+import type { Clip, Day, GpsPoint, ID, ProjectSettings, SourceFile } from '@veh/shared';
 import { canonicalMediaPath } from './winpath.js';
 
 /** ffprobe で抽出した 1 ファイル分のメタデータ(grouping の入力) */
@@ -24,6 +24,8 @@ export interface ProbedFile {
   audioCodec: string | null;
   fps: number | null;
   playableInBrowser: boolean;
+  /** 撮影位置(location タグ ISO6709)。無ければ null */
+  gps: GpsPoint | null;
 }
 
 /** 2GB(サイズ上限到達判定の閾値) */
@@ -185,7 +187,16 @@ function toSourceFile(file: ProbedFile, startOffsetSec: number): SourceFile {
     mtime: file.mtime,
     startOffsetSec,
     playableInBrowser: file.playableInBrowser,
+    gps: file.gps,
   };
+}
+
+/** クリップの代表 GPS: GPS を持つ最初のファイルの値(無ければ null) */
+function clipGpsOf(files: SourceFile[]): GpsPoint | null {
+  for (const f of files) {
+    if (f.gps) return f.gps;
+  }
+  return null;
 }
 
 export interface GroupingResult {
@@ -234,6 +245,7 @@ export function buildDaysAndClips(
         recordedAt,
         reviewStatus: 'unreviewed',
         watchedRanges: [],
+        gps: clipGpsOf(sourceFiles),
       };
       clips.push(clip);
     }

@@ -69,7 +69,7 @@ export async function scanMediaRoots(
     throw new Error(
       `メディアルートが見つかりません: ${missing.join(' / ')}。` +
         `フォルダの存在とパスの綴りを確認してください` +
-        (process.platform !== 'win32' ? '(Windows パスは /mnt/<ドライブ>/ に自動変換して探しています)' : ''),
+        (process.platform === 'linux' ? '(Windows パスは /mnt/<ドライブ>/ に自動変換して探しています)' : ''),
     );
   }
   if (missing.length > 0) {
@@ -121,6 +121,7 @@ export async function scanMediaRoots(
           audioCodec: meta.audioCodec,
           fps: meta.fps,
           playableInBrowser: meta.playableInBrowser,
+          gps: meta.gps,
         });
       } catch (e) {
         console.warn(`[scan] probe failed: ${f.path}: ${(e as Error).message}`);

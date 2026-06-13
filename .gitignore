@@ -6,7 +6,8 @@ dist/
 # プロジェクトデータ(メモ・キャッシュ)はリポジトリ外
 project-data/
 
-# VAD モデル(scripts/download-model.mjs で取得)
+# 解析モデル(scripts/download-model.mjs / download-whisper-model.mjs で取得)
 packages/server/models/*.onnx
+packages/server/models/*.bin
 
 .DS_Store

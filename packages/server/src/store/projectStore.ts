@@ -14,6 +14,7 @@ import {
   type ProjectSettings,
   type ProjectState,
   type ReviewStatus,
+  type Selection,
   type TimeRange,
 } from '@veh/shared';
 
@@ -51,6 +52,11 @@ export class ProjectStore {
     if (fs.existsSync(opts.projectFile)) {
       const raw = fs.readFileSync(opts.projectFile, 'utf8');
       state = JSON.parse(raw) as ProjectState;
+      // Phase 2 マイグレーション: 旧データに selections が無ければ {} で初期化
+      if (!state.selections) state.selections = {};
+      // Phase 4 マイグレーション: 旧データに無い設定キー(proxyAllFiles 等)を
+      // defaultSettings で補完する
+      state.settings = { ...defaultSettings, ...state.settings };
     } else {
       state = {
         version: 1,
@@ -58,6 +64,7 @@ export class ProjectStore {
         days: [],
         clips: {},
         notes: {},
+        selections: {},
       };
     }
     const store = new ProjectStore(state, opts);
@@ -99,25 +106,39 @@ export class ProjectStore {
   /**
    * 再スキャン結果でマージ。
    * 同一 clipId の既存クリップの reviewStatus / watchedRanges は必ず保持。
-   * notes は孤児も含め一切削除しない。
+   * 同一 fileId の proxyAvailable フラグも引き継ぐ。
+   * notes / selections は孤児も含め一切削除しない。
    */
   replaceScanResult(days: Day[], clips: Clip[]): void {
+    // 既存ファイルの proxyAvailable を fileId で引き継ぐためのインデックス
+    const prevProxy = new Map<ID, boolean>();
+    for (const c of Object.values(this.state.clips)) {
+      for (const f of c.files) {
+        if (f.proxyAvailable) prevProxy.set(f.id, true);
+      }
+    }
+
     const newClips: Record<ID, Clip> = {};
     for (const c of clips) {
+      // 再スキャンで作り直された SourceFile に proxyAvailable を復元
+      const files = c.files.map((f) =>
+        prevProxy.get(f.id) ? { ...f, proxyAvailable: true } : f,
+      );
       const prev = this.state.clips[c.id];
       if (prev) {
         newClips[c.id] = {
           ...c,
+          files,
           reviewStatus: prev.reviewStatus,
           watchedRanges: prev.watchedRanges,
         };
       } else {
-        newClips[c.id] = c;
+        newClips[c.id] = { ...c, files };
       }
     }
     this.state.days = days;
     this.state.clips = newClips;
-    // notes はそのまま保持(孤児も削除しない)
+    // notes / selections はそのまま保持(孤児も削除しない)
     this.scheduleSave();
   }
 
@@ -158,6 +179,117 @@ export class ProjectStore {
     delete this.state.notes[noteId];
     this.scheduleSave();
     return true;
+  }
+
+  getSelection(selectionId: ID): Selection | undefined {
+    return this.state.selections[selectionId];
+  }
+
+  getAllSelections(): Selection[] {
+    return Object.values(this.state.selections);
+  }
+
+  /** 指定クリップに属する Selection 群 */
+  getSelectionsForClip(clipId: ID): Selection[] {
+    return Object.values(this.state.selections).filter((s) => s.clipId === clipId);
+  }
+
+  /**
+   * Selection を新規作成。
+   * noteId 指定があれば該当 Note を promoted に更新する(昇格フロー)。
+   */
+  createSelection(
+    clipId: ID,
+    input: {
+      inSec: number;
+      outSec: number;
+      text?: string;
+      tags?: string[];
+      rating?: 0 | 1 | 2 | 3;
+      noteId?: ID;
+    },
+  ): Selection {
+    const now = new Date().toISOString();
+    const selection: Selection = {
+      id: nanoid(12),
+      clipId,
+      inSec: input.inSec,
+      outSec: input.outSec,
+      text: input.text ?? '',
+      tags: input.tags ?? [],
+      rating: input.rating ?? 0,
+      noteId: input.noteId ?? null,
+      orderKey: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.state.selections[selection.id] = selection;
+    // 昇格元の付箋があれば promoted に更新
+    if (input.noteId) {
+      const note = this.state.notes[input.noteId];
+      if (note) {
+        note.status = 'promoted';
+        note.updatedAt = now;
+      }
+    }
+    this.scheduleSave();
+    return selection;
+  }
+
+  updateSelection(
+    selectionId: ID,
+    patch: {
+      inSec?: number;
+      outSec?: number;
+      text?: string;
+      tags?: string[];
+      rating?: 0 | 1 | 2 | 3;
+      orderKey?: number | null;
+    },
+  ): Selection | undefined {
+    const sel = this.state.selections[selectionId];
+    if (!sel) return undefined;
+    if (patch.inSec !== undefined) sel.inSec = patch.inSec;
+    if (patch.outSec !== undefined) sel.outSec = patch.outSec;
+    if (patch.text !== undefined) sel.text = patch.text;
+    if (patch.tags !== undefined) sel.tags = patch.tags;
+    if (patch.rating !== undefined) sel.rating = patch.rating;
+    if (patch.orderKey !== undefined) sel.orderKey = patch.orderKey;
+    sel.updatedAt = new Date().toISOString();
+    this.scheduleSave();
+    return sel;
+  }
+
+  /**
+   * Selection を削除。
+   * 紐づく Note(noteId)が存在し promoted なら open へ戻す。
+   */
+  deleteSelection(selectionId: ID): boolean {
+    const sel = this.state.selections[selectionId];
+    if (!sel) return false;
+    if (sel.noteId) {
+      const note = this.state.notes[sel.noteId];
+      if (note && note.status === 'promoted') {
+        note.status = 'open';
+        note.updatedAt = new Date().toISOString();
+      }
+    }
+    delete this.state.selections[selectionId];
+    this.scheduleSave();
+    return true;
+  }
+
+  /** プロキシ生成済みフラグを設定(永続化)。対象ファイルが無ければ false */
+  setProxyAvailable(fileId: ID, available: boolean): boolean {
+    for (const clip of Object.values(this.state.clips)) {
+      const f = clip.files.find((sf) => sf.id === fileId);
+      if (f) {
+        f.proxyAvailable = available;
+        this.scheduleSave();
+        return true;
+      }
+    }
+    return false;
   }
 
   setReviewStatus(clipId: ID, status: ReviewStatus): Clip | undefined {
