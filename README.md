@@ -115,6 +115,38 @@ project-data/
 
 素材ファイルは**読み取り専用**で扱い、一切書き込みません。
 
+## デスクトップアプリ(Tauri)
+
+ブラウザ + ローカルサーバーの構成をそのまま **Tauri** で 1 つの実行ファイルに包み、配布できます。
+
+### 仕組み
+
+- **サーバーを単一バイナリ化**: `packages/server` を esbuild で 1 ファイルにバンドルし、[`@yao-pkg/pkg`](https://github.com/yao-pkg/pkg) で Node ランタイム同梱の実行ファイルに(`src-tauri/binaries/veh-server-<target>`)。Tauri のサイドカーとして起動します。
+- **WebView は `http://localhost:<空きポート>` を開く**: 起動時に空きポートを確保してサーバーへ注入。サーバー(Fastify)が UI と API を同一オリジンで配信するため CORS 不要、Web 版と完全に同じコードが動きます。
+- **ffmpeg / ffprobe は初回起動時に自動取得**(crateforge と同じ方式)。取得元は [ffmpeg-static](https://github.com/eugeneware/ffmpeg-static) で、**Apple Silicon には arm64 ネイティブ**を取得します(Rosetta 不要)。URL は `VEH_FFMPEG_URL` / `VEH_FFPROBE_URL` で上書き可。`whisper-cli` と Web UI はアプリに同梱。**whisper モデル(約 466MB)も初回起動時にダウンロード**。進捗は起動画面(splash)に表示されます。
+- **VAD は silencedetect(ffmpeg)** に固定(onnxruntime-node は単一バイナリに含めないため。Web 版は Silero のまま)。
+
+### 必要なもの
+
+- Rust ツールチェーン(`rustup`)。ネイティブの WebView は OS 標準(macOS は WKWebView)を使うため追加不要
+- Node / pnpm(リポジトリ共通)
+
+### 開発・ビルド
+
+```bash
+pnpm tauri:dev      # 開発(vite + dev サーバーをそのまま window で表示。サイドカーは使わない)
+pnpm tauri:build    # 配布ビルド(.app/.dmg・.msi・.AppImage 等を生成)
+```
+
+`tauri:build` は `beforeBuildCommand`(= `pnpm run tauri:prepare`)で **shared/web のビルド → サーバー単一バイナリ生成 → whisper-cli の配置** を自動実行します。CI(`.github/workflows/release.yml`)では macOS(arm64/x64)・Windows・Linux 向けに whisper.cpp を各 OS でビルドして同梱し、タグ push でリリースに添付します。
+
+### データの引き継ぎ(Web 版・既存データから)
+
+パッケージ版はデータの保存先を**起動画面から選べます**(既定は OS のアプリ領域)。
+
+- **既存の `project-data` フォルダを指定すれば、これまでのメモ・選定・キャッシュをそのまま引き継げます**(コピー不要)。
+- クリップ ID は素材の絶対パス由来なので、**素材を同じ場所に置いたまま**なら解析キャッシュも含めて完全に再利用されます(別マシンへ移動し素材パスが変わると、手動データは孤児化し再解析になります → 上の「プラットフォーム別の注意」と同じ理由)。
+
 ## キーボードショートカット(クリップ画面)
 
 | キー | 動作 |

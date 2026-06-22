@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Edit Helper — セットアップ</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Segoe UI", sans-serif;
+        background: #15171c;
+        color: #e6e8ec;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .card { width: min(560px, 90vw); padding: 32px 36px; }
+      h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+      .sub { color: #9aa0a8; font-size: 13px; margin: 0 0 24px; }
+      .phase { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 14px; }
+      .phase .icon { width: 18px; text-align: center; }
+      .phase .name { width: 130px; color: #c5c9cf; }
+      .phase .msg { color: #8d939b; font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .phase.done .icon { color: #57c97a; }
+      .phase.active .icon { color: #4aa3ff; }
+      .phase.error .icon { color: #ff6b6b; }
+      .bar { height: 6px; background: #262a31; border-radius: 4px; overflow: hidden; margin-top: 14px; }
+      .bar > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #4aa3ff, #57c97a); transition: width .2s ease; }
+      .err { color: #ff8585; font-size: 13px; margin-top: 16px; display: none; white-space: pre-wrap; }
+      .datadir { margin-top: 28px; padding-top: 18px; border-top: 1px solid #262a31; font-size: 12px; color: #9aa0a8; }
+      .datadir code { color: #c5c9cf; word-break: break-all; }
+      .row { display: flex; gap: 8px; margin-top: 10px; }
+      button {
+        font: inherit; font-size: 12px; color: #e6e8ec; background: #262a31;
+        border: 1px solid #333842; border-radius: 6px; padding: 6px 12px; cursor: pointer;
+      }
+      button:hover { background: #2f343d; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Video Edit Helper</h1>
+      <p class="sub" id="sub">初回セットアップ中… 依存コンポーネントを準備しています。</p>
+
+      <div id="phases">
+        <div class="phase" data-phase="ffmpeg"><span class="icon">○</span><span class="name">ffmpeg</span><span class="msg"></span></div>
+        <div class="phase" data-phase="ffprobe"><span class="icon">○</span><span class="name">ffprobe</span><span class="msg"></span></div>
+        <div class="phase" data-phase="model"><span class="icon">○</span><span class="name">whisper モデル</span><span class="msg"></span></div>
+      </div>
+
+      <div class="bar"><i id="bar"></i></div>
+      <div class="err" id="err"></div>
+
+      <div class="datadir">
+        データの保存先: <code id="datadir">—</code>
+        <div class="row">
+          <button id="change">フォルダを変更…</button>
+          <button id="reset">既定に戻す</button>
+        </div>
+        <div style="margin-top:8px; color:#6f757d;">
+          既存の <code>project-data</code> フォルダを選ぶと、これまでの解析データをそのまま引き継げます。
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const T = window.__TAURI__;
+      const $ = (id) => document.getElementById(id);
+
+      function setPhase(phase, status, message, progress) {
+        const el = document.querySelector(`.phase[data-phase="${phase}"]`);
+        if (el) {
+          el.classList.remove("active", "done", "error");
+          const icon = el.querySelector(".icon");
+          const msg = el.querySelector(".msg");
+          if (status === "done" || status === "skip") { el.classList.add("done"); icon.textContent = "✓"; }
+          else if (status === "error") { el.classList.add("error"); icon.textContent = "✕"; }
+          else { el.classList.add("active"); icon.textContent = "⟳"; }
+          if (message) msg.textContent = message;
+        }
+        if (typeof progress === "number") $("bar").style.width = Math.round(progress * 100) + "%";
+        if (status === "error" && message) { $("err").style.display = "block"; $("err").textContent = message; }
+      }
+
+      async function refreshDataDir() {
+        try {
+          const info = await T.core.invoke("get_setup_info");
+          $("datadir").textContent = info.data_dir;
+        } catch (e) { /* dev など __TAURI__ コマンド未提供時は無視 */ }
+      }
+
+      if (T) {
+        T.event.listen("setup-progress", (ev) => {
+          try {
+            const e = typeof ev.payload === "string" ? JSON.parse(ev.payload) : ev.payload;
+            if (e.phase === "ready") {
+              if (e.status === "error") setPhase("model", "error", e.message);
+              else $("sub").textContent = "起動しています…";
+            } else {
+              setPhase(e.phase, e.status, e.message, e.progress);
+            }
+          } catch (_) {}
+        });
+        T.event.listen("setup-ready", () => { $("sub").textContent = "起動しています…"; $("bar").style.width = "100%"; });
+
+        $("change").addEventListener("click", () => T.core.invoke("choose_data_dir"));
+        $("reset").addEventListener("click", () => T.core.invoke("use_default_data_dir"));
+        refreshDataDir();
+      }
+    </script>
+  </body>
+</html>

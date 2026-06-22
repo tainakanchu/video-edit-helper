@@ -1,0 +1,70 @@
+name: ci
+
+# push / PR ごとに型チェック・テストと、Linux でのデスクトップビルド検証を行う。
+# (各 OS 向けの配布物生成と署名・リリースは release.yml がタグ push で担当)
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  build-desktop:
+    runs-on: ubuntu-22.04
+    env:
+      VEH_RUST_TRIPLE: x86_64-unknown-linux-gnu
+      VEH_PKG_TARGET: node22-linux-x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux 依存(WebKitGTK 等)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            build-essential libssl-dev cmake
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      # whisper.cpp を OpenMP なし・静的寄りでビルドして配布可能な whisper-cli を作る
+      - name: build whisper.cpp (whisper-cli)
+        run: |
+          git clone --depth 1 https://github.com/ggerganov/whisper.cpp /tmp/whisper.cpp
+          cd /tmp/whisper.cpp
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENMP=OFF -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON
+          cmake --build build --config Release -j --target whisper-cli
+          echo "VEH_WHISPER_CLI_SRC=$(find build -name whisper-cli -type f | head -1)" >> "$GITHUB_ENV"
+
+      # beforeBuildCommand(tauri:prepare)が shared/web ビルド + server 単一バイナリ + whisper-cli 配置を実行。
+      # CI ではリリースせず .deb 生成までで「ビルドが通る」ことを確認する。
+      - name: tauri build (deb only, no release)
+        run: pnpm exec tauri build --bundles deb

@@ -37,6 +37,10 @@ export interface Config {
   whisperLanguage: string;
   /** ビルド済み Web UI(packages/web/dist)。存在すれば静的配信する */
   webDistDir: string;
+  /** true なら Silero(onnxruntime-node)を使わず silencedetect を直接使う(パッケージ版の単一バイナリ用) */
+  disableSilero: boolean;
+  /** true なら起動時に ffmpeg/ffprobe・whisper モデルを自動取得する(パッケージ版) */
+  autoProvision: boolean;
 }
 
 /** packages/web/dist を import.meta.url 基準で解決 */
@@ -87,6 +91,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     whisperThreads: env.WHISPER_THREADS ? Number(env.WHISPER_THREADS) : defaultWhisperThreads(),
     whisperLanguage: env.VEH_WHISPER_LANG ?? 'auto',
     webDistDir: env.VEH_WEB_DIST ?? defaultWebDistDir(),
+    disableSilero: env.VEH_DISABLE_SILERO === '1' || env.VEH_DISABLE_SILERO === 'true',
+    autoProvision: env.VEH_AUTO_PROVISION === '1' || env.VEH_AUTO_PROVISION === 'true',
   };
   for (const dir of [
     config.projectDir,
