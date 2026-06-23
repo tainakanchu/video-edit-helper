@@ -86,19 +86,39 @@ jobs:
           echo "found whisper-cli: $BIN"
           echo "VEH_WHISPER_CLI_SRC=$BIN" >> "$GITHUB_ENV"
 
-      - name: build Tauri app
-        uses: tauri-apps/tauri-action@v0
+      # APPLE_CERTIFICATE secret がある時だけ署名 env を有効化する。
+      # 空文字の APPLE_CERTIFICATE を tauri-action に渡すと security import が失敗するため、
+      # bash で存在判定して、設定時のみ GITHUB_ENV に流す(無ければ未署名ビルド)。
+      - name: macOS 署名 env を準備(secret 設定時のみ)
+        if: runner.os == 'macOS'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # --- 署名(設定済みなら有効化される。未設定なら未署名ビルド) ---
-          # macOS:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Windows(任意): TAURI_SIGNING_PRIVATE_KEY 等
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            {
+              echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+              echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+              echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+              echo "APPLE_ID=$APPLE_ID"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+            } >> "$GITHUB_ENV"
+            echo "macOS 署名を有効化しました"
+          else
+            echo "APPLE_CERTIFICATE 未設定 → 未署名ビルド"
+          fi
+
+      - name: build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 署名 env は上のステップが secret 設定時のみ GITHUB_ENV 経由で渡す(未設定なら未署名)。
+          # Windows 署名は任意で TAURI_SIGNING_PRIVATE_KEY 等を追加する。
         with:
           # beforeBuildCommand(tauri:prepare)が shared/web ビルド + server 単一バイナリ + whisper-cli 配置を行う
           args: --target ${{ matrix.rust_target }}
