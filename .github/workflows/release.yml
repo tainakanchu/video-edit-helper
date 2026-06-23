@@ -34,7 +34,7 @@ jobs:
       VEH_PKG_TARGET: ${{ matrix.pkg_target }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Linux 依存(WebKitGTK 等)
         if: runner.os == 'Linux'
@@ -48,11 +48,8 @@ jobs:
         if: runner.os != 'Linux'
         uses: lukka/get-cmake@latest
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.32.1
-
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -110,7 +107,7 @@ jobs:
       # タグなし(手動)実行ではリリースに上げず成果物として保存する
       - name: upload artifacts (manual run)
         if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: veh-${{ matrix.rust_target }}
           path: |
