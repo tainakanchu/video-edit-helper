@@ -4,6 +4,9 @@ name: release
 # 手動実行(workflow_dispatch)では署名なしでアーティファクトのみ生成する。
 on:
   push:
+    branches:
+      # 一時: ブランチ push でもマトリクスを検証する(タグ無し=リリースは作らず成果物のみ)。検証後に削除する。
+      - "feat/tauri-desktop-packaging"
     tags:
       - "v*"
   workflow_dispatch:
