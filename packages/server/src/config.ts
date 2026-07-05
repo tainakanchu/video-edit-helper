@@ -73,15 +73,24 @@ function defaultWhisperThreads(): number {
 /** 環境変数から Config を構築する。ディレクトリは mkdir -p 済みにする */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const projectDir = path.resolve(env.VEH_PROJECT_DIR ?? './project-data');
+  // 大容量で再生成が容易なキャッシュ(サムネ・プロキシ)の置き場。
+  // VEH_CACHE_DIR を指定するとローカルに分離でき、VEH_PROJECT_DIR を OneDrive 等に置いても
+  // GB 級のプロキシまで同期せずに済む。未指定なら従来どおり projectDir/cache。
+  const bulkyCacheDir = env.VEH_CACHE_DIR
+    ? path.resolve(env.VEH_CACHE_DIR)
+    : path.join(projectDir, 'cache');
+  // 解析結果(文字起こし・シーン・VAD)は小さく再生成コストが高いので projectDir 側に置き、
+  // project.json と一緒に同期できるようにする。
+  const analysisDir = path.join(projectDir, 'cache');
   const config: Config = {
     projectDir,
     projectFile: path.join(projectDir, 'project.json'),
     backupsDir: path.join(projectDir, 'backups'),
-    thumbsDir: path.join(projectDir, 'cache', 'thumbs'),
-    vadDir: path.join(projectDir, 'cache', 'vad'),
-    proxiesDir: path.join(projectDir, 'cache', 'proxies'),
-    transcriptsDir: path.join(projectDir, 'cache', 'transcripts'),
-    scenesDir: path.join(projectDir, 'cache', 'scenes'),
+    thumbsDir: path.join(bulkyCacheDir, 'thumbs'),
+    vadDir: path.join(analysisDir, 'vad'),
+    proxiesDir: path.join(bulkyCacheDir, 'proxies'),
+    transcriptsDir: path.join(analysisDir, 'transcripts'),
+    scenesDir: path.join(analysisDir, 'scenes'),
     port: env.PORT ? Number(env.PORT) : SERVER_PORT_DEFAULT,
     ffmpegPath: env.FFMPEG_PATH ?? 'ffmpeg',
     ffprobePath: env.FFPROBE_PATH ?? 'ffprobe',

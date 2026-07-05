@@ -89,7 +89,8 @@ pnpm dev
 
 | 変数 | デフォルト | 説明 |
 |---|---|---|
-| `VEH_PROJECT_DIR` | `./project-data` | メモ・キャッシュの保存先(素材ドライブと分離可) |
+| `VEH_PROJECT_DIR` | `./project-data` | 同期したいデータ(project.json・backups・文字起こし/シーン/VAD)の保存先 |
+| `VEH_CACHE_DIR` | `<VEH_PROJECT_DIR>/cache` | 大容量キャッシュ(サムネ・プロキシ)の保存先。ローカルに分離したい時に指定 |
 | `PORT` | `4810` | API サーバーポート |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | `ffmpeg` / `ffprobe` | バイナリのパス |
 | `VEH_VAD_MODEL` | `packages/server/models/silero_vad.onnx` | VAD モデルパス |
@@ -102,16 +103,21 @@ pnpm dev
 ### プロジェクトデータの構成
 
 ```
-project-data/
-├── project.json     # メモ・選定・レビュー状態(最重要データ)
-├── backups/         # 世代バックアップ(5 分間隔・50 世代)
+project-data/            # VEH_PROJECT_DIR: 同期したいデータ(OneDrive 等に置ける)
+├── project.json         # メモ・選定・レビュー状態(最重要データ)
+├── backups/             # 世代バックアップ(5 分間隔・50 世代)
 └── cache/
-    ├── thumbs/      # サムネイル
-    ├── vad/         # 発話区間
-    ├── proxies/     # 軽量プロキシ動画
-    ├── scenes/      # シーン転換点
-    └── transcripts/ # 文字起こし
+    ├── vad/             # 発話区間
+    ├── scenes/          # シーン転換点(再生成が重い)
+    └── transcripts/     # 文字起こし(whisper。再生成が重い)
+
+# 大容量・再生成が容易なキャッシュは VEH_CACHE_DIR に分離できる(未指定なら上の cache/ 配下)
+<VEH_CACHE_DIR>/
+├── thumbs/              # サムネイル
+└── proxies/             # 軽量プロキシ動画(GB 級)
 ```
+
+`project.json`・`backups`・解析結果(文字起こし/シーン/VAD)は小さく再生成コストが高いので `VEH_PROJECT_DIR` に、サムネ・プロキシは大容量なので `VEH_CACHE_DIR`(既定は同居)に置き分けられます。**`VEH_PROJECT_DIR` だけをクラウド同期**すれば、GB 級のプロキシを避けつつメモ・文字起こしを複数マシンで共有できます。
 
 素材ファイルは**読み取り専用**で扱い、一切書き込みません。
 
@@ -146,6 +152,7 @@ pnpm tauri:build    # 配布ビルド(.app/.dmg・.msi・.AppImage 等を生成)
 
 - **既存の `project-data` フォルダを指定すれば、これまでのメモ・選定・キャッシュをそのまま引き継げます**(コピー不要)。
 - クリップ ID は素材の内容指紋(パス非依存)なので、**素材を別の場所・別マシンに移動しても**メモ・選定・解析キャッシュはそのまま再利用されます(→ 上の「プラットフォーム別の注意」参照)。
+- **クラウド同期(OneDrive 等)**: 保存先に同期フォルダを指定すれば、メモ・選定・文字起こしを複数マシンで共有できます。サムネ・プロキシ(大容量)や ffmpeg・whisper モデルはローカル(`app_cache_dir` / `app_data_dir`)に自動分離されるので、同期は軽量です。
 
 ## キーボードショートカット(クリップ画面)
 

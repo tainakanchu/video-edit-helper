@@ -118,10 +118,23 @@ fn start_server(app: &tauri::AppHandle) {
     let whisper_path = resource_dir.join("whisper").join(whisper_name);
     let web_dist = resource_dir.join("web-dist");
 
+    // 保存先を役割ごとに分ける:
+    //  - data_dir  : project.json / backups / 解析結果(文字起こし・シーン・VAD)。
+    //                ユーザー選択可(OneDrive 等で同期する用途)
+    //  - cache_dir : サムネ・プロキシ等の大容量キャッシュ。マシンローカル(app_cache_dir)
+    //  - deps_dir  : ffmpeg/ffprobe・whisper モデル。OS/arch 依存で再取得可なのでローカル永続(app_data_dir)
     let data_dir = resolved_data_dir(app);
-    let bin_dir = data_dir.join("bin");
-    let models_dir = data_dir.join("models");
-    for d in [&data_dir, &bin_dir, &models_dir] {
+    let cache_dir = match app.path().app_cache_dir() {
+        Ok(d) => d.join("cache"),
+        Err(_) => data_dir.join("cache"),
+    };
+    let deps_dir = match app.path().app_data_dir() {
+        Ok(d) => d,
+        Err(_) => data_dir.clone(),
+    };
+    let bin_dir = deps_dir.join("bin");
+    let models_dir = deps_dir.join("models");
+    for d in [&data_dir, &cache_dir, &bin_dir, &models_dir] {
         if let Err(e) = std::fs::create_dir_all(d) {
             eprintln!("[veh] mkdir {d:?} 失敗: {e}");
             return;
@@ -144,6 +157,7 @@ fn start_server(app: &tauri::AppHandle) {
     let sidecar = sidecar
         .env("PORT", port.to_string())
         .env("VEH_PROJECT_DIR", data_dir.to_string_lossy().to_string())
+        .env("VEH_CACHE_DIR", cache_dir.to_string_lossy().to_string())
         .env("VEH_WEB_DIST", web_dist.to_string_lossy().to_string())
         .env("WHISPER_PATH", whisper_path.to_string_lossy().to_string())
         .env("VEH_WHISPER_MODEL", model_path.to_string_lossy().to_string())
