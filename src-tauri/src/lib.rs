@@ -4,9 +4,10 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, RunEvent};
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 
 /// 起動中のサイドカー(Node サーバー)。アプリ終了時に kill する。
 #[derive(Default)]
@@ -249,11 +250,63 @@ fn start_server(app: &tauri::AppHandle) {
     });
 }
 
+/// 起動時に GitHub リリースの latest.json を確認し、新版があればネイティブダイアログで確認して
+/// ダウンロード・適用・再起動する。本体 UI は http://localhost 配信で Tauri IPC が使えないため、
+/// アップデート導線は Rust 側に置く(crateforge と同様のユーザー操作最小の更新)。
+async fn check_for_update(app: tauri::AppHandle) {
+    let updater = match app.updater() {
+        Ok(u) => u,
+        Err(e) => {
+            eprintln!("[veh] updater 初期化失敗: {e}");
+            return;
+        }
+    };
+    let update = match updater.check().await {
+        Ok(Some(u)) => u,
+        Ok(None) => return, // 既に最新
+        Err(e) => {
+            eprintln!("[veh] 更新確認失敗: {e}");
+            return;
+        }
+    };
+    let version = update.version.clone();
+    let confirmed = app
+        .dialog()
+        .message(format!("新しいバージョン {version} が利用可能です。今すぐ更新しますか?"))
+        .title("アップデート")
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "更新".to_string(),
+            "後で".to_string(),
+        ))
+        .blocking_show();
+    if !confirmed {
+        return;
+    }
+    eprintln!("[veh] 更新をダウンロード中: {version}");
+    match update.download_and_install(|_downloaded, _total| {}, || {}).await {
+        Ok(_) => {
+            app.dialog()
+                .message("更新を適用しました。アプリを再起動します。")
+                .title("アップデート")
+                .blocking_show();
+            app.restart();
+        }
+        Err(e) => {
+            eprintln!("[veh] 更新の適用に失敗: {e}");
+            app.dialog()
+                .message(format!("更新に失敗しました: {e}"))
+                .title("アップデート")
+                .blocking_show();
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ServerProcess::default())
         .invoke_handler(tauri::generate_handler![
             get_setup_info,
@@ -271,6 +324,10 @@ pub fn run() {
                 )?;
             }
             start_server(&app.handle());
+            // 本番のみ: 起動時にアップデートを確認する(dev はスキップ)
+            if !tauri::is_dev() {
+                tauri::async_runtime::spawn(check_for_update(app.handle().clone()));
+            }
             Ok(())
         })
         .build(tauri::generate_context!())

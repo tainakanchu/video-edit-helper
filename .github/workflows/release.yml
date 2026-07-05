@@ -115,8 +115,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 署名 env は上のステップが secret 設定時のみ GITHUB_ENV 経由で渡す(未設定なら未署名)。
-          # Windows 署名は任意で TAURI_SIGNING_PRIVATE_KEY 等を追加する。
+          # 自動アップデート用: updater アーティファクトの署名と latest.json 生成に必要
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # macOS コード署名 env は上の「macOS 署名 env を準備」ステップが secret 設定時のみ渡す(未設定なら未署名)。
         with:
           # beforeBuildCommand(tauri:prepare)が shared/web ビルド + server 単一バイナリ + whisper-cli 配置を行う
           args: --target ${{ matrix.rust_target }}

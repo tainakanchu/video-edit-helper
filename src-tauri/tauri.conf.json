@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "VideoEditHelper",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "io.github.tainakanchu.video-edit-helper",
   "build": {
     "frontendDist": "splash",
@@ -29,6 +29,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "externalBin": ["binaries/veh-server"],
     "resources": {
@@ -42,5 +43,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI0REU5MTVEOThDMzMwOEMKUldTTU1NT1lYWkhldEtvSEpDcnVEcE1td0pQRUQ5aWZmZk1xU2Foeisza1kwazVXcWJ0WXlmMFQK",
+      "endpoints": [
+        "https://github.com/tainakanchu/video-edit-helper/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
