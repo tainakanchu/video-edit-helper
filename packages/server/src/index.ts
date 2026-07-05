@@ -15,6 +15,14 @@ async function main(): Promise<void> {
   const store = ProjectStore.load({
     projectFile: config.projectFile,
     backupsDir: config.backupsDir,
+    // v1→v2 移行時にサムネ/VAD/文字起こし/シーン/プロキシのキャッシュも rename する
+    cacheDirs: {
+      thumbsDir: config.thumbsDir,
+      vadDir: config.vadDir,
+      transcriptsDir: config.transcriptsDir,
+      scenesDir: config.scenesDir,
+      proxiesDir: config.proxiesDir,
+    },
   });
   const queue = new JobQueue();
   const coordinator = new JobCoordinator(config, store, queue);

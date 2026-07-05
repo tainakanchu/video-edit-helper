@@ -17,6 +17,7 @@ import {
   type Selection,
   type TimeRange,
 } from '@veh/shared';
+import { applyIdRemap, computeIdRemap, migrateCacheDirsSync, type CacheDirs } from './migrateIds.js';
 
 const SAVE_DEBOUNCE_MS = 500;
 const BACKUP_MIN_INTERVAL_MS = 5 * 60 * 1000;
@@ -27,6 +28,11 @@ export interface ProjectStoreOptions {
   backupsDir: string;
   /** デバウンス無効化(テスト用) */
   saveDebounceMs?: number;
+  /**
+   * キャッシュディレクトリ群。指定時のみ v1→v2 移行でキャッシュも rename する。
+   * 未指定(テスト等)ではキャッシュ rename をスキップする。
+   */
+  cacheDirs?: CacheDirs;
 }
 
 /** project.json の永続化とドメイン状態の保持を担う */
@@ -57,9 +63,39 @@ export class ProjectStore {
       // Phase 4 マイグレーション: 旧データに無い設定キー(proxyAllFiles 等)を
       // defaultSettings で補完する
       state.settings = { ...defaultSettings, ...state.settings };
+
+      // v1 → v2 マイグレーション: ID をパス由来から内容指紋由来へ移行する。
+      // 素材を別ドライブへ移動してもメモ・選定・レビュー・キャッシュが
+      // デタッチされないようにする(起動時に一度だけ実行)。
+      const currentVersion = state.version ?? 1;
+      if (currentVersion < 2) {
+        // 移行前の原本を退避(冪等ではないので初回のみ意味を持つ)
+        if (fs.existsSync(opts.projectFile) && fs.existsSync(opts.backupsDir)) {
+          try {
+            const stamp = timestampName(new Date());
+            const dest = path.join(opts.backupsDir, `premigrate-v1-${stamp}.json`);
+            fs.copyFileSync(opts.projectFile, dest);
+          } catch (err) {
+            console.warn(`[migrate] 事前バックアップに失敗(継続): ${String(err)}`);
+          }
+        }
+        const maps = computeIdRemap(state);
+        if (maps.changed) {
+          state = applyIdRemap(state, maps);
+          if (opts.cacheDirs) migrateCacheDirsSync(opts.cacheDirs, maps);
+        } else {
+          state.version = 2;
+        }
+        // 移行済み state を同期書き込み(次回起動で再実行されないよう durable に)
+        fs.writeFileSync(opts.projectFile, JSON.stringify(state, null, 2), 'utf8');
+        console.log(
+          `[migrate] project.json を v2(fingerprint ID)へ移行しました (clips remapped: ${maps.changed})`,
+        );
+      }
     } else {
       state = {
-        version: 1,
+        // 新規作成は最初から v2(指紋由来 ID)
+        version: 2,
         settings: { ...defaultSettings },
         days: [],
         clips: {},

@@ -5,8 +5,11 @@ import {
   cameraLabelOf,
   clipIdOf,
   dayIdOf,
+  fileFingerprint,
+  fileIdOf,
   recordedAtOf,
   splitNumberedName,
+  type FingerprintInput,
   type ProbedFile,
 } from './grouping.js';
 
@@ -302,7 +305,54 @@ describe('Day.index と clipId 安定性', () => {
       ['2025-01-03', 2],
     ]);
   });
-  it('clipId は先頭ファイル絶対パスの sha1 先頭 12 文字', () => {
-    expect(clipIdOf('/media/cam/F_0001.MP4')).toHaveLength(12);
+  it('clipId は指紋の sha1 先頭 12 文字', () => {
+    const fp: FingerprintInput = {
+      fileName: 'F_0001.MP4',
+      sizeBytes: 3 * GB,
+      durationSec: 600,
+      createdAt: null,
+    };
+    expect(clipIdOf(fp)).toHaveLength(12);
+  });
+});
+
+describe('指紋方式の ID(パス非依存・内容固有)', () => {
+  const base: FingerprintInput = {
+    fileName: 'VCAM_0032.MP4',
+    sizeBytes: 12_582_912,
+    durationSec: 2.5,
+    createdAt: '2026-04-19T03:05:39.000Z',
+  };
+
+  it('fileFingerprint は決定的で、同じ内容フィールドなら同じ文字列', () => {
+    const a = { ...base };
+    const b = { ...base };
+    expect(fileFingerprint(a)).toBe(fileFingerprint(b));
+    // durationSec は ms 精度に量子化される(0.5ms 未満の揺れは無視)
+    expect(fileFingerprint({ ...base, durationSec: 2.5004 })).toBe(fileFingerprint(base));
+  });
+
+  it('パス非依存: 指紋には path を渡さないので、どこへ移動しても同じ id', () => {
+    // 同一の (fileName, size, duration, createdAt) からは常に同じ id が出る
+    expect(fileIdOf({ ...base })).toBe(fileIdOf({ ...base }));
+    expect(clipIdOf({ ...base })).toBe(clipIdOf({ ...base }));
+  });
+
+  it('createdAt=null でも安定した id を返す', () => {
+    const nullish: FingerprintInput = { ...base, createdAt: null };
+    expect(fileIdOf(nullish)).toBe(fileIdOf({ ...nullish }));
+    expect(fileIdOf(nullish)).toHaveLength(12);
+  });
+
+  it('sizeBytes / durationSec / fileName / createdAt が違えば別 id', () => {
+    const id = fileIdOf(base);
+    expect(fileIdOf({ ...base, sizeBytes: base.sizeBytes + 1 })).not.toBe(id);
+    expect(fileIdOf({ ...base, durationSec: base.durationSec + 1 })).not.toBe(id);
+    expect(fileIdOf({ ...base, fileName: 'VCAM_0033.MP4' })).not.toBe(id);
+    expect(fileIdOf({ ...base, createdAt: null })).not.toBe(id);
+  });
+
+  it('fileIdOf と clipIdOf は同じ入力でも接頭辞で名前空間が分かれる', () => {
+    expect(fileIdOf(base)).not.toBe(clipIdOf(base));
   });
 });

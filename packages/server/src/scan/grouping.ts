@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { Clip, Day, GpsPoint, ID, ProjectSettings, SourceFile } from '@veh/shared';
-import { canonicalMediaPath } from './winpath.js';
 
 /** ffprobe で抽出した 1 ファイル分のメタデータ(grouping の入力) */
 export interface ProbedFile {
@@ -40,13 +39,39 @@ function shortHash(input: string): string {
   return crypto.createHash('sha1').update(input).digest('hex').slice(0, 12);
 }
 
-export function fileIdOf(absPath: string): string {
-  // WSL ⇔ Windows ネイティブ間で同じファイルが同じ ID になるよう正規化してからハッシュ
-  return shortHash(canonicalMediaPath(absPath));
+/** 指紋計算に使うファイルの内容固有フィールド(path / mtime は含めない) */
+export interface FingerprintInput {
+  fileName: string;
+  sizeBytes: number;
+  durationSec: number;
+  createdAt: string | null;
 }
 
-export function clipIdOf(firstFileAbsPath: string): string {
-  return shortHash(canonicalMediaPath(firstFileAbsPath));
+/**
+ * ファイル内容固有の指紋文字列を生成する純関数。
+ *
+ * ドライブ(外付け SSD → HDD 等)・フォルダ・OS(WSL ⇔ Windows)を移動しても、
+ * 同じファイルなら同じ ID になるように、内容を代表するフィールドのみで構成する。
+ *
+ * - path は移動・コピーで変わるため使わない(パス由来 ID がデタッチを招いていた元凶)
+ * - mtime はコピー(cp / エクスプローラの移動)で変わるため絶対に使わない
+ *
+ * fileName・sizeBytes・createdAt(コンテナの creation_time)・durationSec は
+ * 同一素材であればドライブを跨いでも不変なので、これらで指紋を作る。
+ * durationSec は浮動小数の丸め差で ID が揺れないよう ms 精度に量子化する。
+ */
+export function fileFingerprint(f: FingerprintInput): string {
+  return [f.fileName, f.sizeBytes, Math.round(f.durationSec * 1000), f.createdAt ?? ''].join('|');
+}
+
+export function fileIdOf(f: FingerprintInput): string {
+  // 'file|' 接頭辞で clipId と名前空間を分ける(同一入力でも別 ID になる)
+  return shortHash('file|' + fileFingerprint(f));
+}
+
+export function clipIdOf(firstFile: FingerprintInput): string {
+  // クリップ ID はチェーン先頭ファイル(最小番号)の指紋から算出する
+  return shortHash('clip|' + fileFingerprint(firstFile));
 }
 
 /** ファイル名を (prefix, 数値サフィックス) に分解。数値が取れなければ num=null */
@@ -173,7 +198,7 @@ function groupDirIntoClips(filesInDir: ProbedFile[]): ProbedFile[][] {
 /** ProbedFile → SourceFile に変換(startOffsetSec を付与) */
 function toSourceFile(file: ProbedFile, startOffsetSec: number): SourceFile {
   return {
-    id: fileIdOf(file.path),
+    id: fileIdOf(file),
     path: file.path,
     fileName: file.fileName,
     sizeBytes: file.sizeBytes,
@@ -226,7 +251,7 @@ export function buildDaysAndClips(
     for (const group of clipFileGroups) {
       // 先頭ファイルでソート安定化(番号順は groupDir 内で確定済み)
       const first = group[0]!;
-      const clipId = clipIdOf(first.path);
+      const clipId = clipIdOf(first);
       let offset = 0;
       const sourceFiles: SourceFile[] = group.map((f) => {
         const sf = toSourceFile(f, offset);

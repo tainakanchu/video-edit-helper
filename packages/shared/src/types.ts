@@ -113,7 +113,8 @@ export interface Selection {
 }
 
 export interface ProjectState {
-  version: 1;
+  /** スキーマ世代。1=パス由来 ID、2=内容指紋由来 ID(起動時に移行) */
+  version: number;
   settings: ProjectSettings;
   days: Day[];
   clips: Record<ID, Clip>;
