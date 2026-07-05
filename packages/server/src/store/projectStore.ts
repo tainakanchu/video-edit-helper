@@ -19,7 +19,11 @@ import {
 } from '@veh/shared';
 import { applyIdRemap, computeIdRemap, migrateCacheDirsSync, type CacheDirs } from './migrateIds.js';
 
-const SAVE_DEBOUNCE_MS = 500;
+// OneDrive 等の同期フォルダに置かれても壊れにくいよう、書き込みは控えめにする。
+// (頻繁な書き込み=タイムスタンプ更新は同期先で偽の競合やチャーンの原因になる)
+const SAVE_DEBOUNCE_MS = 1500;
+// 連続編集でも最初の変更からこの時間で必ず書き出す(クラッシュ時のデータ損失の上限)
+const MAX_COALESCE_MS = 15 * 1000;
 const BACKUP_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const BACKUP_KEEP = 50;
 
@@ -44,6 +48,8 @@ export class ProjectStore {
   private saveTimer: NodeJS.Timeout | null = null;
   private lastBackupAt = 0;
   private lastSavedJson = '';
+  /** 保留中の最初の変更時刻(coalesce の上限計算用。0 なら保留なし) */
+  private pendingSince = 0;
 
   private constructor(state: ProjectState, opts: ProjectStoreOptions) {
     this.state = state;
@@ -355,12 +361,17 @@ export class ProjectStore {
     return clip;
   }
 
-  /** デバウンス保存をスケジュール */
+  /** デバウンス保存をスケジュール(連続編集は MAX_COALESCE_MS で必ず書き出す) */
   private scheduleSave(): void {
+    const now = Date.now();
+    if (this.pendingSince === 0) this.pendingSince = now;
     if (this.saveTimer) clearTimeout(this.saveTimer);
+    // 連続編集で書き込みを間引きつつ、溜め込みすぎない上限を設ける
+    const maxWaitLeft = Math.max(0, this.pendingSince + MAX_COALESCE_MS - now);
+    const wait = Math.min(this.debounceMs, maxWaitLeft);
     this.saveTimer = setTimeout(() => {
       void this.flush();
-    }, this.debounceMs);
+    }, wait);
     // テストやプロセス終了をブロックしない
     this.saveTimer.unref?.();
   }
@@ -387,6 +398,13 @@ export class ProjectStore {
     const json = JSON.stringify(this.state, null, 2);
     const changed = json !== this.lastSavedJson;
 
+    // 変更が無ければ書き込まない。同期先(OneDrive 等)で無駄なファイル更新
+    // (=タイムスタンプ更新→偽の競合や同期チャーン)を避けるベストプラクティス。
+    if (!changed) {
+      this.pendingSince = 0;
+      return;
+    }
+
     // 内容変化時のバックアップ判定(本体書き込み前の現行ファイルを退避)
     if (changed && fs.existsSync(this.projectFile)) {
       const now = Date.now();
@@ -401,6 +419,7 @@ export class ProjectStore {
     await fsp.writeFile(tmp, json, 'utf8');
     await fsp.rename(tmp, this.projectFile);
     this.lastSavedJson = json;
+    this.pendingSince = 0;
   }
 
   /** 現行 project.json を backups/ に世代退避し、新しい順 50 件に整理 */

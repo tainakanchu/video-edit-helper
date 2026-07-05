@@ -175,7 +175,10 @@ fn start_server(app: &tauri::AppHandle) {
     };
     let bin_dir = deps_dir.join("bin");
     let models_dir = deps_dir.join("models");
-    for d in [&data_dir, &cache_dir, &bin_dir, &models_dir] {
+    // バックアップはローカル永続へ(同期フォルダに大量のファイル生成/削除を出さない)。
+    // 同期先(project.json)は OneDrive 等のバージョン履歴側でも守られる。
+    let backups_dir = deps_dir.join("backups");
+    for d in [&data_dir, &cache_dir, &bin_dir, &models_dir, &backups_dir] {
         if let Err(e) = std::fs::create_dir_all(d) {
             eprintln!("[veh] mkdir {d:?} 失敗: {e}");
             return;
@@ -199,6 +202,7 @@ fn start_server(app: &tauri::AppHandle) {
         .env("PORT", port.to_string())
         .env("VEH_PROJECT_DIR", data_dir.to_string_lossy().to_string())
         .env("VEH_CACHE_DIR", cache_dir.to_string_lossy().to_string())
+        .env("VEH_BACKUPS_DIR", backups_dir.to_string_lossy().to_string())
         .env("VEH_WEB_DIST", web_dist.to_string_lossy().to_string())
         .env("WHISPER_PATH", whisper_path.to_string_lossy().to_string())
         .env("VEH_WHISPER_MODEL", model_path.to_string_lossy().to_string())

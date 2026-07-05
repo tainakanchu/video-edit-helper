@@ -85,7 +85,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const config: Config = {
     projectDir,
     projectFile: path.join(projectDir, 'project.json'),
-    backupsDir: path.join(projectDir, 'backups'),
+    // バックアップは大量のファイル生成/ローテーションで同期先を汚すため、
+    // VEH_BACKUPS_DIR でローカル(非同期)へ分離できる。未指定なら従来どおり projectDir 配下。
+    backupsDir: env.VEH_BACKUPS_DIR ? path.resolve(env.VEH_BACKUPS_DIR) : path.join(projectDir, 'backups'),
     thumbsDir: path.join(bulkyCacheDir, 'thumbs'),
     vadDir: path.join(analysisDir, 'vad'),
     proxiesDir: path.join(bulkyCacheDir, 'proxies'),

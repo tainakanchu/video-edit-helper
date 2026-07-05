@@ -40,4 +40,11 @@ describe('loadConfig のディレクトリ配置', () => {
     expect(c.projectFile).toBe(path.join(proj, 'project.json'));
     expect(c.backupsDir).toBe(path.join(proj, 'backups'));
   });
+
+  it('VEH_BACKUPS_DIR でバックアップをローカル(非同期)へ分離できる(既定は projectDir/backups)', () => {
+    const proj = tmp();
+    expect(loadConfig({ VEH_PROJECT_DIR: proj }).backupsDir).toBe(path.join(proj, 'backups'));
+    const local = tmp();
+    expect(loadConfig({ VEH_PROJECT_DIR: proj, VEH_BACKUPS_DIR: local }).backupsDir).toBe(local);
+  });
 });

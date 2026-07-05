@@ -30,6 +30,19 @@ function newStore(): ProjectStore {
   return store;
 }
 
+describe('同期先(OneDrive 等)向け: 無駄な書き込みの抑制', () => {
+  it('内容が変わらなければ project.json を再書き込みしない', async () => {
+    const store = newStore();
+    store.updateSettings({ dayStartHour: 5 });
+    await store.flush();
+    expect(fs.existsSync(projectFile)).toBe(true);
+    // 保存済みファイルを消し、変更なしで再 flush → 書き戻さない(=書き込みが起きていない証跡)
+    fs.rmSync(projectFile);
+    await store.flush();
+    expect(fs.existsSync(projectFile)).toBe(false);
+  });
+});
+
 function mkClip(id: string, overrides: Partial<Clip> = {}): Clip {
   return {
     id,
