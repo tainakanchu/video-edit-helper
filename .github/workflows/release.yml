@@ -8,6 +8,10 @@ on:
       - "v*"
   workflow_dispatch:
 
+# GITHUB_TOKEN にリリース作成権限を付与する(既定 read-only だと create-a-release で失敗する)
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
