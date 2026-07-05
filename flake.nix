@@ -20,12 +20,11 @@
             pkgs.whisper-cpp # 文字起こし(whisper-cli)
           ];
 
-          # whisper モデルの既定パスは packages/server/models/ggml-small.bin。
-          # whisper-cli はここで PATH に入るので server は WHISPER_PATH 既定値のまま動く。
-          # 標準出力を汚さないよう stderr に出す(direnv / スクリプトの command 置換対策)
-          shellHook = ''
-            echo "veh devshell: $(ffmpeg -version | head -1 | cut -d' ' -f1-3), whisper-cli=$(command -v whisper-cli >/dev/null && echo ok || echo missing)" >&2
-          '';
+          # shellHook は空にしている。以前は ffmpeg / whisper-cli の存在確認メッセージを
+          # 出していたが、Zed(WSL) 起動時の fish 経路で shellHook の値が fish コードとして
+          # eval される事象が発生し、devshell 突入時にクラッシュしていた。
+          # 診断が必要なら手動で `ffmpeg -version` / `command -v whisper-cli` を叩けば良い。
+          shellHook = "";
         };
       });
     };
