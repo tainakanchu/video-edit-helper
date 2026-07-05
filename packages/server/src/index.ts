@@ -9,9 +9,22 @@ import { JobQueue } from './jobs/queue.js';
 import { JobCoordinator } from './jobs/coordinator.js';
 import { TranscriptCache } from './search/transcriptCache.js';
 import { registerRoutes } from './routes/api.js';
+import { ensureDependencies, makeStdoutEmitter } from './provision/index.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
+
+  // パッケージ版(VEH_AUTO_PROVISION=1)は listen 前に依存(ffmpeg/モデル)を用意する。
+  // 進捗は stdout の NDJSON で Tauri 側 splash に転送される。dev では即 return。
+  const emit = makeStdoutEmitter();
+  try {
+    await ensureDependencies(config, emit);
+  } catch (e) {
+    emit({ phase: 'ready', status: 'error', message: (e as Error).message });
+    console.error('[provision] 依存の準備に失敗しました:', e);
+    process.exit(1);
+  }
+
   const store = ProjectStore.load({
     projectFile: config.projectFile,
     backupsDir: config.backupsDir,
@@ -65,6 +78,10 @@ async function main(): Promise<void> {
 
   await app.listen({ port: config.port, host: '0.0.0.0' });
   app.log.info(`project dir: ${config.projectDir}`);
+
+  // Tauri(サイドカー親)へ「listen 開始」を通知する。Rust 側はこの行を受けて
+  // WebView を http://localhost:<port> へ遷移させる(splash → 本体)。
+  process.stdout.write(`VEH_READY ${config.port}\n`);
 }
 
 main().catch((err) => {

@@ -12,6 +12,11 @@ const VAD_EPSILON = 0.5;
 
 /** silero が使えれば silero、ダメなら silencedetect。選択結果をログ出力 */
 export async function selectVadProvider(config: Config): Promise<VadProvider> {
+  // パッケージ版(単一バイナリ)は onnxruntime-node を同梱しないため明示的に無効化できる
+  if (config.disableSilero) {
+    console.log('[vad] provider: silencedetect (silero 無効化)');
+    return new SilenceDetectProvider(config.ffmpegPath);
+  }
   try {
     const provider = await SileroProvider.create(config.vadModelPath, config.ffmpegPath);
     console.log('[vad] provider: silero');

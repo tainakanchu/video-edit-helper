@@ -1,0 +1,24 @@
+name: ci
+
+# push / PR ごとの軽量チェック(型チェック + テスト)。
+# 各 OS のデスクトップビルド・配布物生成・署名は release.yml がタグ push / 手動実行で担当する。
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      # pnpm のバージョンは package.json の packageManager フィールドから自動検出
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test

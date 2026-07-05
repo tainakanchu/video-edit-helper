@@ -1,0 +1,132 @@
+name: release
+
+# タグ push(v*) で macOS(arm64/x64)/Windows/Linux 向けにビルドしてリリースに添付する。
+# 手動実行(workflow_dispatch)では署名なしでアーティファクトのみ生成する。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            rust_target: aarch64-apple-darwin
+            pkg_target: node22-macos-arm64
+          - os: ubuntu-22.04
+            rust_target: x86_64-unknown-linux-gnu
+            pkg_target: node22-linux-x64
+          - os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            pkg_target: node22-win-x64
+
+    runs-on: ${{ matrix.os }}
+    env:
+      # fetch-whisper-cli.mjs / pkg.mjs が参照する(ビルド対象に一致させる)
+      VEH_RUST_TRIPLE: ${{ matrix.rust_target }}
+      VEH_PKG_TARGET: ${{ matrix.pkg_target }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Linux 依存(WebKitGTK 等)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            build-essential libssl-dev cmake
+
+      - name: cmake(macOS/Windows)
+        if: runner.os != 'Linux'
+        uses: lukka/get-cmake@latest
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      # whisper.cpp を各 OS で静的寄りにビルドして配布可能な whisper-cli を作る。
+      # OpenMP(libomp)依存を外し、共有ライブラリ化しない(自己完結させる)。
+      - name: build whisper.cpp (whisper-cli)
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/ggerganov/whisper.cpp /tmp/whisper.cpp
+          cd /tmp/whisper.cpp
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENMP=OFF -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON
+          cmake --build build --config Release -j --target whisper-cli
+          # 出力パスは OS/世代で差があるため探索して env に渡す
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            BIN=$(find build -name 'whisper-cli.exe' | head -1)
+          else
+            BIN=$(find build -name 'whisper-cli' -type f | head -1)
+          fi
+          echo "found whisper-cli: $BIN"
+          echo "VEH_WHISPER_CLI_SRC=$BIN" >> "$GITHUB_ENV"
+
+      # APPLE_CERTIFICATE secret がある時だけ署名 env を有効化する。
+      # 空文字の APPLE_CERTIFICATE を tauri-action に渡すと security import が失敗するため、
+      # bash で存在判定して、設定時のみ GITHUB_ENV に流す(無ければ未署名ビルド)。
+      - name: macOS 署名 env を準備(secret 設定時のみ)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            {
+              echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+              echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+              echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+              echo "APPLE_ID=$APPLE_ID"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+            } >> "$GITHUB_ENV"
+            echo "macOS 署名を有効化しました"
+          else
+            echo "APPLE_CERTIFICATE 未設定 → 未署名ビルド"
+          fi
+
+      - name: build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 署名 env は上のステップが secret 設定時のみ GITHUB_ENV 経由で渡す(未設定なら未署名)。
+          # Windows 署名は任意で TAURI_SIGNING_PRIVATE_KEY 等を追加する。
+        with:
+          # beforeBuildCommand(tauri:prepare)が shared/web ビルド + server 単一バイナリ + whisper-cli 配置を行う
+          args: --target ${{ matrix.rust_target }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: "Video Edit Helper ${{ github.ref_name }}"
+          releaseDraft: true
+          prerelease: false
+
+      # タグなし(手動)実行ではリリースに上げず成果物として保存する
+      - name: upload artifacts (manual run)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v7
+        with:
+          name: veh-${{ matrix.rust_target }}
+          path: |
+            src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*
+          if-no-files-found: warn

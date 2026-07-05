@@ -12,9 +12,14 @@
     "build": "pnpm --filter @veh/shared build && pnpm --filter @veh/server build && pnpm --filter @veh/web build",
     "start": "pnpm --filter @veh/server start",
     "test": "pnpm --filter @veh/shared build && pnpm -r test",
-    "typecheck": "pnpm --filter @veh/shared build && pnpm -r typecheck"
+    "typecheck": "pnpm --filter @veh/shared build && pnpm -r typecheck",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:prepare": "pnpm --filter @veh/shared build && pnpm --filter @veh/web build && pnpm --filter @veh/server binary && node scripts/fetch-whisper-cli.mjs"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.3",
     "concurrently": "^9.0.0"
   },
   "pnpm": {
