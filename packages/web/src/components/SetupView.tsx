@@ -2,8 +2,11 @@ import { useState } from 'react'
 import type { ProjectSettings } from '@veh/shared'
 import { defaultSettings } from '@veh/shared'
 import { useAppStore } from '../store/useAppStore'
+import { mediaPathExample } from '../lib/platform'
 
 export function SetupView() {
+  // 素材フォルダのパス例は OS 別に出し分ける(Windows/mac/Linux)
+  const pathExample = mediaPathExample()
   const project = useAppStore(s => s.project)
   const saveSettings = useAppStore(s => s.saveSettings)
   const startScan = useAppStore(s => s.startScan)
@@ -84,7 +87,7 @@ export function SetupView() {
               type="text"
               value={root}
               onChange={e => updateRoot(i, e.target.value)}
-              placeholder="例: D:\Footage\Taiwan"
+              placeholder={`例: ${pathExample}`}
               disabled={scanning}
             />
             <button
@@ -176,7 +179,7 @@ export function SetupView() {
       </div>
 
       <p className="hint">
-        Windows のフォルダパスを入力してください(例: D:\Footage\Taiwan)
+        フォルダの絶対パスを入力してください(例: {pathExample})
       </p>
     </div>
   )

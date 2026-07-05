@@ -17,12 +17,16 @@ struct ServerProcess(Mutex<Option<CommandChild>>);
 struct AppSettings {
     /// ユーザーが選んだデータディレクトリ(未設定なら既定=app_data_dir/project-data)
     data_dir: Option<String>,
+    /// ユーザーが選んだキャッシュディレクトリ(未設定なら既定=app_cache_dir/cache)
+    cache_dir: Option<String>,
 }
 
 #[derive(Serialize)]
 struct SetupInfo {
     data_dir: String,
     default_data_dir: String,
+    cache_dir: String,
+    default_cache_dir: String,
 }
 
 fn settings_path(app: &tauri::AppHandle) -> PathBuf {
@@ -62,6 +66,21 @@ fn resolved_data_dir(app: &tauri::AppHandle) -> PathBuf {
     }
 }
 
+fn default_cache_dir(app: &tauri::AppHandle) -> PathBuf {
+    app.path()
+        .app_cache_dir()
+        .expect("app_cache_dir")
+        .join("cache")
+}
+
+/// 実際に使うキャッシュディレクトリ(設定があればそれ、無ければ既定)
+fn resolved_cache_dir(app: &tauri::AppHandle) -> PathBuf {
+    match load_settings(app).cache_dir {
+        Some(d) if !d.is_empty() => PathBuf::from(d),
+        _ => default_cache_dir(app),
+    }
+}
+
 /// OS に空きポートを払い出してもらう(127.0.0.1:0 バインド)
 fn free_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
@@ -75,6 +94,8 @@ fn get_setup_info(app: tauri::AppHandle) -> SetupInfo {
     SetupInfo {
         data_dir: resolved_data_dir(&app).to_string_lossy().to_string(),
         default_data_dir: default_data_dir(&app).to_string_lossy().to_string(),
+        cache_dir: resolved_cache_dir(&app).to_string_lossy().to_string(),
+        default_cache_dir: default_cache_dir(&app).to_string_lossy().to_string(),
     }
 }
 
@@ -96,6 +117,28 @@ fn choose_data_dir(app: tauri::AppHandle) {
 fn use_default_data_dir(app: tauri::AppHandle) {
     let mut s = load_settings(&app);
     s.data_dir = None;
+    let _ = save_settings(&app, &s);
+    app.restart();
+}
+
+/// フォルダ選択ダイアログを開き、選ばれたらキャッシュディレクトリとして保存して再起動する。
+#[tauri::command]
+fn choose_cache_dir(app: tauri::AppHandle) {
+    if let Some(folder) = app.dialog().file().blocking_pick_folder() {
+        if let Some(path) = folder.as_path() {
+            let mut s = load_settings(&app);
+            s.cache_dir = Some(path.to_string_lossy().to_string());
+            let _ = save_settings(&app, &s);
+            app.restart();
+        }
+    }
+}
+
+/// キャッシュディレクトリを既定(app_cache_dir)に戻して再起動する。
+#[tauri::command]
+fn use_default_cache_dir(app: tauri::AppHandle) {
+    let mut s = load_settings(&app);
+    s.cache_dir = None;
     let _ = save_settings(&app, &s);
     app.restart();
 }
@@ -124,10 +167,7 @@ fn start_server(app: &tauri::AppHandle) {
     //  - cache_dir : サムネ・プロキシ等の大容量キャッシュ。マシンローカル(app_cache_dir)
     //  - deps_dir  : ffmpeg/ffprobe・whisper モデル。OS/arch 依存で再取得可なのでローカル永続(app_data_dir)
     let data_dir = resolved_data_dir(app);
-    let cache_dir = match app.path().app_cache_dir() {
-        Ok(d) => d.join("cache"),
-        Err(_) => data_dir.join("cache"),
-    };
+    let cache_dir = resolved_cache_dir(app);
     let deps_dir = match app.path().app_data_dir() {
         Ok(d) => d,
         Err(_) => data_dir.clone(),
@@ -218,7 +258,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_setup_info,
             choose_data_dir,
-            use_default_data_dir
+            use_default_data_dir,
+            choose_cache_dir,
+            use_default_cache_dir
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

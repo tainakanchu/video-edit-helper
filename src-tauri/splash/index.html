@@ -54,13 +54,24 @@
       <div class="err" id="err"></div>
 
       <div class="datadir">
-        データの保存先: <code id="datadir">—</code>
+        データの保存先(メモ・選定・文字起こし): <code id="datadir">—</code>
         <div class="row">
           <button id="change">フォルダを変更…</button>
           <button id="reset">既定に戻す</button>
         </div>
         <div style="margin-top:8px; color:#6f757d;">
-          既存の <code>project-data</code> フォルダを選ぶと、これまでの解析データをそのまま引き継げます。
+          既存の <code>project-data</code> を選ぶと解析データを引き継げます。OneDrive 等の同期フォルダも指定可。
+        </div>
+
+        <div style="margin-top:16px;">
+          キャッシュの保存先(サムネ・プロキシ。大容量): <code id="cachedir">—</code>
+        </div>
+        <div class="row">
+          <button id="change-cache">フォルダを変更…</button>
+          <button id="reset-cache">既定に戻す</button>
+        </div>
+        <div style="margin-top:8px; color:#6f757d;">
+          大容量で再生成できるキャッシュは、ローカルの速いディスクに分離して置けます(同期不要)。
         </div>
       </div>
     </div>
@@ -84,10 +95,11 @@
         if (status === "error" && message) { $("err").style.display = "block"; $("err").textContent = message; }
       }
 
-      async function refreshDataDir() {
+      async function refreshDirs() {
         try {
           const info = await T.core.invoke("get_setup_info");
           $("datadir").textContent = info.data_dir;
+          $("cachedir").textContent = info.cache_dir;
         } catch (e) { /* dev など __TAURI__ コマンド未提供時は無視 */ }
       }
 
@@ -107,7 +119,9 @@
 
         $("change").addEventListener("click", () => T.core.invoke("choose_data_dir"));
         $("reset").addEventListener("click", () => T.core.invoke("use_default_data_dir"));
-        refreshDataDir();
+        $("change-cache").addEventListener("click", () => T.core.invoke("choose_cache_dir"));
+        $("reset-cache").addEventListener("click", () => T.core.invoke("use_default_cache_dir"));
+        refreshDirs();
       }
     </script>
   </body>
