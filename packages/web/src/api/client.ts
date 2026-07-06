@@ -1,6 +1,7 @@
 import {
   apiPaths,
   type AddWatchedRequest,
+  type AnalysisStatusResponse,
   type ClipResponse,
   type CreateNoteRequest,
   type CreateSelectionRequest,
@@ -91,6 +92,8 @@ export const api = {
     request<ScanResponse>(apiPaths.scan(), { method: 'POST', body: req }),
 
   getJobs: () => request<JobsResponse>(apiPaths.jobs()),
+
+  getAnalysisStatus: () => request<AnalysisStatusResponse>(apiPaths.analysisStatus()),
 
   getMounts: () => request<MountsResponse>(apiPaths.mounts()),
 

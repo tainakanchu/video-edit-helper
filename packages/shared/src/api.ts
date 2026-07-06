@@ -44,6 +44,8 @@ export const apiPaths = {
   scan: () => `/api/scan`,
   /** GET → JobsResponse */
   jobs: () => `/api/jobs`,
+  /** GET → AnalysisStatusResponse(クリップごとの解析到達度) */
+  analysisStatus: () => `/api/analysis-status`,
   /** POST EnqueueRequest → EnqueueResponse(解析ジョブの手動投入/再実行) */
   enqueue: () => `/api/jobs/enqueue`,
   /** POST CreateNoteRequest → NoteResponse */
@@ -114,6 +116,21 @@ export interface ScanResponse {
 
 export interface JobsResponse {
   jobs: JobInfo[];
+}
+
+/** クリップ1本の解析到達度(各解析が完了しているか) */
+export interface ClipAnalysisStatus {
+  clipId: ID;
+  thumbsCoarse: boolean;
+  thumbsFine: boolean;
+  vad: boolean;
+  proxy: boolean;
+  scenes: boolean;
+  transcript: boolean;
+}
+
+export interface AnalysisStatusResponse {
+  clips: ClipAnalysisStatus[];
 }
 
 export interface EnqueueRequest {

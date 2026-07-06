@@ -1,4 +1,4 @@
-import type { Clip, JobType } from '@veh/shared';
+import type { Clip, ClipAnalysisStatus, JobType } from '@veh/shared';
 import type { Config } from '../config.js';
 import type { ProjectStore } from '../store/projectStore.js';
 import { JobQueue } from './queue.js';
@@ -35,6 +35,20 @@ export class JobCoordinator {
   /** 検索用の Transcript キャッシュを登録(whisper 完了時に invalidate する) */
   setTranscriptCache(cache: TranscriptCache): void {
     this.transcriptCache = cache;
+  }
+
+  /** 全クリップの解析到達度を返す(DayView 等の俯瞰表示用) */
+  getAnalysisStatus(): ClipAnalysisStatus[] {
+    const settings = this.store.getSettings();
+    return this.store.getAllClips().map((clip) => ({
+      clipId: clip.id,
+      thumbsCoarse: thumbsComplete(this.config, clip, settings.thumbCoarseIntervalSec),
+      thumbsFine: thumbsComplete(this.config, clip, settings.thumbFineIntervalSec),
+      vad: hasVadResult(this.config, clip.id),
+      proxy: proxyComplete(this.config, clip, settings.proxyAllFiles),
+      scenes: hasScenes(this.config, clip.id),
+      transcript: hasTranscript(this.config, clip.id),
+    }));
   }
 
   /** スキャンジョブを投入。完了後に解析ジョブを自動投入 */

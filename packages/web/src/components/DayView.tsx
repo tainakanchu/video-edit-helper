@@ -1,15 +1,36 @@
-import { useState } from 'react'
-import type { Clip, ExportFormat, ID } from '@veh/shared'
+import { useState, useEffect } from 'react'
+import type { Clip, ClipAnalysisStatus, ExportFormat, ID } from '@veh/shared'
 import { apiPaths, formatTime } from '@veh/shared'
 import { useAppStore, summarizeDay, clipCoverage, notesForClip } from '../store/useAppStore'
-import { thumbUrl } from '../api/client'
+import { thumbUrl, api } from '../api/client'
 import { useRouter } from '../lib/useRouter'
 
 interface ClipCardProps {
   clip: Clip
   coarseIntervalSec: number
   noteCount: number
+  analysis?: ClipAnalysisStatus
   onOpen: () => void
+}
+
+/** 解析到達度のバッジ(済み=点灯 / 未=薄い) */
+function AnalysisBadges({ a }: { a: ClipAnalysisStatus }) {
+  const items: [boolean, string, string][] = [
+    [a.thumbsFine, 'サ', 'サムネ(密)'],
+    [a.vad, '声', '発話解析'],
+    [a.proxy, 'プ', 'プロキシ'],
+    [a.scenes, 'シ', 'シーン解析'],
+    [a.transcript, '字', '文字起こし'],
+  ]
+  return (
+    <div className="analysis-badges" title="解析状況(サ=サムネ 声=発話 プ=プロキシ シ=シーン 字=文字起こし)">
+      {items.map(([done, label, tip]) => (
+        <span key={label} className={done ? 'on' : 'off'} title={`${tip}: ${done ? '完了' : '未'}`}>
+          {label}
+        </span>
+      ))}
+    </div>
+  )
 }
 
 function reviewIcon(status: string): string {
@@ -22,7 +43,7 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }
 
-function ClipCard({ clip, coarseIntervalSec, noteCount, onOpen }: ClipCardProps) {
+function ClipCard({ clip, coarseIntervalSec, noteCount, analysis, onOpen }: ClipCardProps) {
   const [imgError, setImgError] = useState(false)
   const date = new Date(clip.recordedAt)
   const timeStr = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
@@ -53,6 +74,7 @@ function ClipCard({ clip, coarseIntervalSec, noteCount, onOpen }: ClipCardProps)
           <span>{formatTime(clip.durationSec)}</span>
           <span>メモ {noteCount}</span>
         </div>
+        {analysis && <AnalysisBadges a={analysis} />}
       </div>
       <div className="bar">
         <span style={{ width: `${coveragePct}%` }} />
@@ -72,7 +94,22 @@ export function DayView() {
   const selectedDayId = useAppStore(s => s.selectedDayId)
   const enqueue = useAppStore(s => s.enqueue)
   const toast = useAppStore(s => s.toast)
+  const jobs = useAppStore(s => s.jobs)
   const { navigate } = useRouter()
+
+  // クリップごとの解析到達度。ジョブの実行/完了で状況が変わるので、稼働ジョブ数の変化で再取得する
+  const activeCount = jobs.filter(j => j.status === 'running' || j.status === 'queued').length
+  const [analysis, setAnalysis] = useState<Record<string, ClipAnalysisStatus>>({})
+  useEffect(() => {
+    void api
+      .getAnalysisStatus()
+      .then(r => {
+        const map: Record<string, ClipAnalysisStatus> = {}
+        for (const s of r.clips) map[s.clipId] = s
+        setAnalysis(map)
+      })
+      .catch(() => {})
+  }, [activeCount])
 
   if (project === null) {
     return <div className="dayview"><p>Day を選択してください</p></div>
@@ -180,6 +217,7 @@ export function DayView() {
               clip={clip}
               coarseIntervalSec={coarseIntervalSec}
               noteCount={notesForClip(project, clipId).length}
+              analysis={analysis[clipId]}
               onOpen={() => navigate({ name: 'clip', clipId, t: null })}
             />
           )

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import {
   apiPaths,
+  type AnalysisStatusResponse,
   type ClipResponse,
   type EnqueueResponse,
   type ExportFormat,
@@ -191,6 +192,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
   // GET /api/jobs
   app.get(apiPaths.jobs(), async (): Promise<JobsResponse> => ({ jobs: queue.list() }));
+
+  // GET /api/analysis-status — クリップごとの解析到達度
+  app.get(
+    apiPaths.analysisStatus(),
+    async (): Promise<AnalysisStatusResponse> => ({ clips: coordinator.getAnalysisStatus() }),
+  );
 
   // POST /api/jobs/enqueue
   app.post(apiPaths.enqueue(), async (req, reply): Promise<EnqueueResponse | void> => {

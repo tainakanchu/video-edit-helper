@@ -1467,3 +1467,22 @@ a {
 .mounts .mount-arrow {
   color: #6f757d;
 }
+
+/* クリップごとの解析到達度バッジ */
+.clip-card .analysis-badges {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+}
+.clip-card .analysis-badges span {
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 3px;
+  background: #262a31;
+  color: #565c65;
+}
+.clip-card .analysis-badges span.on {
+  background: #1f3b2a;
+  color: #57c97a;
+}
