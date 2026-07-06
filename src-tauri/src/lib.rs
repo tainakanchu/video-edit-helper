@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, RunEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
@@ -317,6 +318,61 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ServerProcess::default())
+        // 「設定」メニュー: 起動後もいつでも保存先を変更できるようにする
+        // (本体 UI は remote 配信で Tauri を直接呼べないため、変更導線は Rust 側のメニューに置く)
+        .menu(|handle| {
+            let settings = Submenu::with_items(
+                handle,
+                "設定",
+                true,
+                &[
+                    &MenuItem::with_id(
+                        handle,
+                        "change_data_dir",
+                        "データの保存先を変更…",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &MenuItem::with_id(
+                        handle,
+                        "reset_data_dir",
+                        "データの保存先を既定に戻す",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &MenuItem::with_id(
+                        handle,
+                        "change_cache_dir",
+                        "キャッシュの保存先を変更…",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &MenuItem::with_id(
+                        handle,
+                        "reset_cache_dir",
+                        "キャッシュの保存先を既定に戻す",
+                        true,
+                        None::<&str>,
+                    )?,
+                ],
+            )?;
+            let menu = Menu::default(handle)?;
+            menu.append(&settings)?;
+            Ok(menu)
+        })
+        .on_menu_event(|app, event| {
+            // フォルダ選択はブロッキングなので別スレッドで(コマンドハンドラと同じ扱い)
+            let handle = app.clone();
+            let id = event.id().as_ref().to_string();
+            std::thread::spawn(move || match id.as_str() {
+                "change_data_dir" => choose_data_dir(handle),
+                "reset_data_dir" => use_default_data_dir(handle),
+                "change_cache_dir" => choose_cache_dir(handle),
+                "reset_cache_dir" => use_default_cache_dir(handle),
+                _ => {}
+            });
+        })
         .invoke_handler(tauri::generate_handler![
             get_setup_info,
             choose_data_dir,
