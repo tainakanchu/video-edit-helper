@@ -92,6 +92,7 @@ pnpm dev
 | `VEH_PROJECT_DIR` | `./project-data` | 同期したいデータ(project.json・backups・文字起こし/シーン/VAD)の保存先 |
 | `VEH_CACHE_DIR` | `<VEH_PROJECT_DIR>/cache` | 大容量キャッシュ(サムネ・プロキシ)の保存先。ローカルに分離したい時に指定 |
 | `VEH_BACKUPS_DIR` | `<VEH_PROJECT_DIR>/backups` | 世代バックアップの保存先。同期先を汚さないようローカルに分離したい時に指定 |
+| `VEH_MOUNTS_FILE` | `<VEH_CACHE_DIR>/mounts.json` | 素材ルートの「このマシンでの実パス」対応表(ローカル・非同期)。cross-OS 解決用 |
 | `PORT` | `4810` | API サーバーポート |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | `ffmpeg` / `ffprobe` | バイナリのパス |
 | `VEH_VAD_MODEL` | `packages/server/models/silero_vad.onnx` | VAD モデルパス |
@@ -158,6 +159,7 @@ pnpm tauri:build    # 配布ビルド(.app/.dmg・.msi・.AppImage 等を生成)
 - **既存の `project-data` フォルダを指定すれば、これまでのメモ・選定・キャッシュをそのまま引き継げます**(コピー不要)。
 - クリップ ID は素材の内容指紋(パス非依存)なので、**素材を別の場所・別マシンに移動しても**メモ・選定・解析キャッシュはそのまま再利用されます(→ 上の「プラットフォーム別の注意」参照)。
 - **クラウド同期(OneDrive 等)**: 保存先に同期フォルダを指定すれば、メモ・選定・文字起こしを複数マシンで共有できます。サムネ・プロキシ(大容量)や ffmpeg・whisper モデルはローカル(`app_cache_dir` / `app_data_dir`)に自動分離されるので、同期は軽量です。
+- **cross-OS(例: NTFS ドライブを Windows で書いて Mac で読む)**: 素材の絶対パスは OS ごとに違いますが(Windows `D:\Footage` ⇄ Mac `/Volumes/Footage`)、起動画面/取り込み画面の**「このマシンでの素材の場所」で各ルートのローカルパスを一度だけ指定**すれば、**再スキャンせず**に再生できます。この対応表はマシンごとにローカル保存(非同期)されるので、同期ファイルに OS 依存パスが入らず競合しません。
 
 ## キーボードショートカット(クリップ画面)
 

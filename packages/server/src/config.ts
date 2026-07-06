@@ -22,6 +22,8 @@ export interface Config {
   transcriptsDir: string;
   /** シーン自動分割結果キャッシュ */
   scenesDir: string;
+  /** 素材ルートの「このマシンでの実パス」対応表(ローカル・非同期)。cross-OS 解決用 */
+  mountsFile: string;
   port: number;
   ffmpegPath: string;
   ffprobePath: string;
@@ -93,6 +95,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     proxiesDir: path.join(bulkyCacheDir, 'proxies'),
     transcriptsDir: path.join(analysisDir, 'transcripts'),
     scenesDir: path.join(analysisDir, 'scenes'),
+    // 対応表はローカル(非同期)。既定は大容量キャッシュと同じローカル領域に置く
+    mountsFile: env.VEH_MOUNTS_FILE ?? path.join(bulkyCacheDir, 'mounts.json'),
     port: env.PORT ? Number(env.PORT) : SERVER_PORT_DEFAULT,
     ffmpegPath: env.FFMPEG_PATH ?? 'ffmpeg',
     ffprobePath: env.FFPROBE_PATH ?? 'ffprobe',

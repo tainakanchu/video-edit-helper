@@ -8,6 +8,8 @@ import {
   type EnqueueResponse,
   type ID,
   type JobsResponse,
+  type MountsResponse,
+  type SetMountRequest,
   type NoteResponse,
   type ProjectResponse,
   type ReviewStatus,
@@ -89,6 +91,11 @@ export const api = {
     request<ScanResponse>(apiPaths.scan(), { method: 'POST', body: req }),
 
   getJobs: () => request<JobsResponse>(apiPaths.jobs()),
+
+  getMounts: () => request<MountsResponse>(apiPaths.mounts()),
+
+  setMount: (req: SetMountRequest) =>
+    request<MountsResponse>(apiPaths.mounts(), { method: 'PUT', body: req }),
 
   enqueue: (req: EnqueueRequest) =>
     request<EnqueueResponse>(apiPaths.enqueue(), { method: 'POST', body: req }),

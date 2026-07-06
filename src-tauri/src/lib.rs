@@ -203,6 +203,11 @@ fn start_server(app: &tauri::AppHandle) {
         .env("VEH_PROJECT_DIR", data_dir.to_string_lossy().to_string())
         .env("VEH_CACHE_DIR", cache_dir.to_string_lossy().to_string())
         .env("VEH_BACKUPS_DIR", backups_dir.to_string_lossy().to_string())
+        // cross-OS のマシン別パス対応表(ローカル永続・非同期)
+        .env(
+            "VEH_MOUNTS_FILE",
+            deps_dir.join("mounts.json").to_string_lossy().to_string(),
+        )
         .env("VEH_WEB_DIST", web_dist.to_string_lossy().to_string())
         .env("WHISPER_PATH", whisper_path.to_string_lossy().to_string())
         .env("VEH_WHISPER_MODEL", model_path.to_string_lossy().to_string())

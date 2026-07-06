@@ -10,6 +10,7 @@ import { detectScenesForClip, hasScenes } from './scenes.js';
 import { hasTranscript, transcribeClip } from './whisper.js';
 import type { VadProvider } from '../vad/silencedetect.js';
 import type { TranscriptCache } from '../search/transcriptCache.js';
+import type { MountStore } from '../media/mounts.js';
 
 /**
  * スキャン・サムネ・VAD・プロキシ・文字起こしのジョブを束ねるコーディネーター。
@@ -27,6 +28,8 @@ export class JobCoordinator {
     private readonly config: Config,
     private readonly store: ProjectStore,
     readonly queue: JobQueue,
+    /** cross-OS: 保存済みパスをこのマシンの実パスへ解決する対応表 */
+    private readonly mounts: MountStore,
   ) {}
 
   /** 検索用の Transcript キャッシュを登録(whisper 完了時に invalidate する) */
@@ -101,11 +104,13 @@ export class JobCoordinator {
     return hasTranscript(this.config, clip.id);
   }
 
-  private enqueueOne(type: Exclude<JobType, 'scan'>, clip: Clip): string {
+  private enqueueOne(type: Exclude<JobType, 'scan'>, rawClip: Clip): string {
     const settings = this.store.getSettings();
     const info = this.queue.enqueue(
       type,
       async (ctx) => {
+        // 保存済みパス(別マシン由来かもしれない)をこのマシンの実パスへ解決してからジョブへ渡す
+        const clip = this.mounts.resolveClip(rawClip, settings.mediaRoots);
         if (type === 'thumbs-coarse') {
           await generateThumbs(this.config, clip, settings.thumbCoarseIntervalSec, (r) =>
             ctx.setProgress(r),
@@ -148,7 +153,7 @@ export class JobCoordinator {
           this.transcriptCache?.invalidate(clip.id);
         }
       },
-      clip.id,
+      rawClip.id,
     );
     return info.id;
   }

@@ -3,6 +3,7 @@ import type { ProjectSettings } from '@veh/shared'
 import { defaultSettings } from '@veh/shared'
 import { useAppStore } from '../store/useAppStore'
 import { mediaPathExample } from '../lib/platform'
+import { MountsPanel } from './MountsPanel'
 
 export function SetupView() {
   // 素材フォルダのパス例は OS 別に出し分ける(Windows/mac/Linux)
@@ -181,6 +182,8 @@ export function SetupView() {
       <p className="hint">
         フォルダの絶対パスを入力してください(例: {pathExample})
       </p>
+
+      <MountsPanel />
     </div>
   )
 }

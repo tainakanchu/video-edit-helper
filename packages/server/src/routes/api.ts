@@ -8,6 +8,7 @@ import {
   type EnqueueResponse,
   type ExportFormat,
   type JobsResponse,
+  type MountsResponse,
   type NoteResponse,
   type ProjectResponse,
   type ScanResponse,
@@ -31,6 +32,7 @@ import { renderExport } from '../export/index.js';
 import { searchAll } from '../search/matcher.js';
 import type { TranscriptCache } from '../search/transcriptCache.js';
 import type { JobCoordinator } from '../jobs/coordinator.js';
+import type { MountStore } from '../media/mounts.js';
 
 const settingsSchema = z.object({
   settings: z
@@ -46,6 +48,11 @@ const settingsSchema = z.object({
 
 const scanSchema = z.object({
   mediaRoots: z.array(z.string()).optional(),
+});
+
+const mountSchema = z.object({
+  root: z.string(),
+  localPath: z.string(),
 });
 
 const enqueueSchema = z.object({
@@ -110,6 +117,8 @@ export interface RouteDeps {
   queue: JobQueue;
   coordinator: JobCoordinator;
   transcriptCache: TranscriptCache;
+  /** cross-OS: 保存済みパスをこのマシンの実パスへ解決する対応表 */
+  mounts: MountStore;
 }
 
 /** clipId → 所属 Day を引く(検索結果や書き出しの dayId 解決用) */
@@ -124,10 +133,33 @@ function findDayIdForClip(store: ProjectStore, clipId: string): string | undefin
 
 /** shared の apiPaths が定義する全エンドポイントを登録 */
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  const { config, store, queue, coordinator, transcriptCache } = deps;
+  const { config, store, queue, coordinator, transcriptCache, mounts } = deps;
 
   // GET /api/health
   app.get(apiPaths.health(), async () => ({ status: 'ok' }));
+
+  // GET /api/mounts — 素材ルートと「このマシンでの実パス」の対応(cross-OS)
+  app.get(apiPaths.mounts(), async (): Promise<MountsResponse> => {
+    const map = mounts.getAll();
+    const roots = store.getSettings().mediaRoots.map((root) => ({
+      root,
+      localPath: map[root] ?? null,
+    }));
+    return { roots };
+  });
+
+  // PUT /api/mounts — ルートに対するこのマシンの実パスを設定(空で解除)
+  app.put(apiPaths.mounts(), async (req, reply): Promise<MountsResponse | void> => {
+    const parsed = mountSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return sendError(reply, 400, '不正なリクエストです');
+    mounts.set(parsed.data.root, parsed.data.localPath);
+    const map = mounts.getAll();
+    const roots = store.getSettings().mediaRoots.map((root) => ({
+      root,
+      localPath: map[root] ?? null,
+    }));
+    return { roots };
+  });
 
   // GET /api/project
   app.get(apiPaths.project(), async (): Promise<ProjectResponse> => ({
@@ -289,15 +321,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     async (req, reply): Promise<void> => {
       const resolved = store.resolveFile(req.params.fileId);
       if (!resolved) return sendError(reply, 404, 'file not found');
+      // 保存済みパスをこのマシンの実パスへ解決(別 OS で開いた場合の cross-OS 対応)
+      const mediaPath = mounts.resolve(resolved.path, store.getSettings().mediaRoots);
       let size: number;
       try {
-        const stat = await fsp.stat(resolved.path);
+        const stat = await fsp.stat(mediaPath);
         size = stat.size;
       } catch {
         return sendError(reply, 404, 'file unavailable');
       }
       const range = req.headers.range;
-      const res = buildMediaResponse(resolved.path, size, range);
+      const res = buildMediaResponse(mediaPath, size, range);
       for (const [k, v] of Object.entries(res.headers)) {
         void reply.header(k, v);
       }

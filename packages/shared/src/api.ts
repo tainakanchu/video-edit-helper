@@ -34,6 +34,8 @@ export const defaultSettings: ProjectSettings = {
  */
 export const apiPaths = {
   health: () => `/api/health`,
+  /** GET → MountsResponse / PUT { root, localPath } → MountsResponse(cross-OS のマシン別パス対応) */
+  mounts: () => `/api/mounts`,
   /** GET → ProjectResponse */
   project: () => `/api/project`,
   /** PUT UpdateSettingsRequest → ProjectResponse */
@@ -79,6 +81,22 @@ export const apiPaths = {
 
 export interface ProjectResponse {
   project: ProjectState;
+}
+
+/** cross-OS: 素材ルートと「このマシンでの実パス」の対応。localPath 未設定は null */
+export interface MountRootInfo {
+  root: string;
+  localPath: string | null;
+}
+
+export interface MountsResponse {
+  roots: MountRootInfo[];
+}
+
+export interface SetMountRequest {
+  root: string;
+  /** このマシンでの実パス。空文字で対応を解除 */
+  localPath: string;
 }
 
 export interface UpdateSettingsRequest {

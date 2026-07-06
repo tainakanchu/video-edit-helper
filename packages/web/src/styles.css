@@ -1448,3 +1448,22 @@ a {
 .nowrap {
   white-space: nowrap;
 }
+
+/* cross-OS: このマシンでの素材の場所 */
+.mounts {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #2a2f37;
+}
+.mounts .root-row {
+  align-items: center;
+  gap: 8px;
+}
+.mounts .mount-root {
+  min-width: 160px;
+  word-break: break-all;
+  color: #c5c9cf;
+}
+.mounts .mount-arrow {
+  color: #6f757d;
+}
