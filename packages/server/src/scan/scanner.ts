@@ -16,7 +16,24 @@ interface FoundFile {
   mediaRoot: string;
 }
 
-/** mediaRoot を再帰走査して対象拡張子ファイルを列挙(隠しディレクトリ skip) */
+/**
+ * 走査対象外のディレクトリ判定。
+ * 隠しディレクトリ(.始まり)に加え、OS のゴミ箱/システムフォルダ(削除済み素材が混じる)を除外する。
+ */
+export function isIgnoredDir(name: string): boolean {
+  if (name.startsWith('.')) return true; // Unix 隠し(.Trashes / .Spotlight-V100 等も含む)
+  const lower = name.toLowerCase();
+  return (
+    lower === '$recycle.bin' || // Windows ごみ箱
+    lower === 'recycler' || // 旧 Windows ごみ箱
+    lower === 'system volume information' || // Windows システムフォルダ
+    lower === '#recycle' || // Synology NAS ごみ箱
+    lower === '@recycle' || // QNAP NAS ごみ箱
+    lower === 'found.000' // chkdsk 復旧フォルダ
+  );
+}
+
+/** mediaRoot を再帰走査して対象拡張子ファイルを列挙(隠し/ゴミ箱ディレクトリ skip) */
 export async function walkMediaRoot(mediaRoot: string): Promise<FoundFile[]> {
   const out: FoundFile[] = [];
   async function recur(dir: string): Promise<void> {
@@ -27,11 +44,12 @@ export async function walkMediaRoot(mediaRoot: string): Promise<FoundFile[]> {
       return; // 読めないディレクトリはスキップ
     }
     for (const ent of entries) {
-      if (ent.name.startsWith('.')) continue; // 隠しディレクトリ/ファイル skip
       const full = path.join(dir, ent.name);
       if (ent.isDirectory()) {
+        if (isIgnoredDir(ent.name)) continue; // 隠し/ゴミ箱/システムフォルダは辿らない
         await recur(full);
       } else if (ent.isFile()) {
+        if (ent.name.startsWith('.')) continue; // 隠しファイル skip
         const ext = path.extname(ent.name).toLowerCase();
         if (VIDEO_EXTS.has(ext)) {
           out.push({ path: full, fileName: ent.name, dir, mediaRoot });
