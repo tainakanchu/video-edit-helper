@@ -1,7 +1,7 @@
 // whisper.cpp の ggml モデルを Hugging Face から取得して配置する。
 import fs from 'node:fs';
 import path from 'node:path';
-import { download } from './download.js';
+import { downloadToFile } from './download.js';
 import type { EmitSetup } from './progress.js';
 
 /** 'ggml-small.bin' → 'small'。パターン不一致なら null */
@@ -41,22 +41,41 @@ export async function ensureWhisperModel(
     throw new Error(`whisper モデルの取得 URL を決定できません: ${destPath}`);
   }
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
-  emit?.({
-    phase: 'model',
-    status: 'downloading',
-    progress: 0,
-    message: `whisper モデル(${size ?? '?'})をダウンロード中`,
-  });
-  const bytes = await download(url, {
-    fetchImpl,
-    onProgress: (r) => emit?.({ phase: 'model', status: 'downloading', progress: r }),
-  });
-  if (bytes.length < 1000) {
-    throw new Error(`whisper モデルのサイズが小さすぎます (${bytes.length} bytes)`);
+
+  // 466MB 級なのでメモリに載せずディスクへ逐次保存し、通信の一時的な失敗はリトライする。
+  const tmp = `${destPath}.part`;
+  const MAX_ATTEMPTS = 3;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      emit?.({
+        phase: 'model',
+        status: 'downloading',
+        progress: 0,
+        message:
+          attempt > 1
+            ? `whisper モデルを再取得中 (${attempt}/${MAX_ATTEMPTS})`
+            : `whisper モデル(${size ?? '?'})をダウンロード中`,
+      });
+      await downloadToFile(url, tmp, {
+        fetchImpl,
+        onProgress: (r) => emit?.({ phase: 'model', status: 'downloading', progress: r }),
+      });
+      const written = fs.statSync(tmp).size;
+      if (written < 1000) {
+        throw new Error(`whisper モデルのサイズが小さすぎます (${written} bytes)`);
+      }
+      fs.renameSync(tmp, destPath);
+      emit?.({ phase: 'model', status: 'done', progress: 1, message: 'whisper モデルを配置しました' });
+      return 'installed';
+    } catch (e) {
+      lastErr = e;
+      try {
+        fs.rmSync(tmp, { force: true }); // 壊れた途中ファイルを消してから再試行
+      } catch {
+        /* ignore */
+      }
+    }
   }
-  const tmp = `${destPath}.tmp`;
-  fs.writeFileSync(tmp, bytes);
-  fs.renameSync(tmp, destPath);
-  emit?.({ phase: 'model', status: 'done', progress: 1, message: 'whisper モデルを配置しました' });
-  return 'installed';
+  throw lastErr instanceof Error ? lastErr : new Error('whisper モデルの取得に失敗しました');
 }
