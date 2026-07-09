@@ -34,8 +34,17 @@ function locate() {
 fs.mkdirSync(destDir, { recursive: true });
 const src = locate();
 if (!src || !fs.existsSync(src)) {
+  // 配布ビルド(CI)ではプレースホルダを絶対に置かない。取りこぼしはビルド失敗にする。
+  if (process.env.VEH_REQUIRE_WHISPER === '1') {
+    console.error(
+      `[whisper-cli] 本物の whisper-cli が見つかりません (VEH_WHISPER_CLI_SRC=${
+        process.env.VEH_WHISPER_CLI_SRC ?? '(未設定)'
+      })。VEH_REQUIRE_WHISPER=1 のためビルドを失敗させます。`,
+    );
+    process.exit(1);
+  }
   console.warn(
-    '[whisper-cli] 実体が見つかりませんでした。プレースホルダを配置します(配布前に CI で差し替えてください)',
+    '[whisper-cli] 実体が見つかりませんでした。プレースホルダを配置します(ローカル検証用。配布は CI が差し替え)',
   );
   fs.writeFileSync(dest, isWin ? '' : '#!/bin/sh\necho "whisper-cli placeholder" >&2\nexit 1\n');
   if (!isWin) fs.chmodSync(dest, 0o755);

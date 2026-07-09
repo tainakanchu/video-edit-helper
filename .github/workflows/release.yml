@@ -73,16 +73,22 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/ggerganov/whisper.cpp /tmp/whisper.cpp
           cd /tmp/whisper.cpp
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENMP=OFF -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON
+          # 配布の実行時依存を減らすため CPU 専用・静的寄り(Metal/OpenMP/共有 lib を無効化)
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=OFF -DGGML_OPENMP=OFF -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON
           cmake --build build --config Release -j --target whisper-cli
-          # 出力パスは OS/世代で差があるため探索して env に渡す
+          # 絶対パスで探索する(次の tauri-action ステップは cwd が異なるため相対だと解決できない)
           if [ "${{ runner.os }}" = "Windows" ]; then
-            BIN=$(find build -name 'whisper-cli.exe' | head -1)
+            BIN=$(find "$PWD/build" -name 'whisper-cli.exe' -type f | head -1)
           else
-            BIN=$(find build -name 'whisper-cli' -type f | head -1)
+            BIN=$(find "$PWD/build" -name 'whisper-cli' -type f | head -1)
           fi
           echo "found whisper-cli: $BIN"
+          if [ -z "$BIN" ] || [ ! -f "$BIN" ]; then
+            echo "::error::whisper-cli のビルド出力が見つかりません"; exit 1
+          fi
           echo "VEH_WHISPER_CLI_SRC=$BIN" >> "$GITHUB_ENV"
+          # 本物が用意できたので、以降のプレースホルダ差し替え(＝取りこぼし)を禁止する
+          echo "VEH_REQUIRE_WHISPER=1" >> "$GITHUB_ENV"
 
       # APPLE_CERTIFICATE secret がある時だけ署名 env を有効化する。
       # 空文字の APPLE_CERTIFICATE を tauri-action に渡すと security import が失敗するため、
