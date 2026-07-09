@@ -82,10 +82,15 @@ jobs:
           else
             BIN=$(find "$PWD/build" -name 'whisper-cli' -type f | head -1)
           fi
-          echo "found whisper-cli: $BIN"
           if [ -z "$BIN" ] || [ ! -f "$BIN" ]; then
             echo "::error::whisper-cli のビルド出力が見つかりません"; exit 1
           fi
+          # Windows は Git Bash の /tmp/... 形式を Node(fetch-whisper-cli)が解釈できないため
+          # ネイティブパス(C:/...)へ変換する
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            BIN=$(cygpath -m "$BIN")
+          fi
+          echo "found whisper-cli: $BIN"
           echo "VEH_WHISPER_CLI_SRC=$BIN" >> "$GITHUB_ENV"
           # 本物が用意できたので、以降のプレースホルダ差し替え(＝取りこぼし)を禁止する
           echo "VEH_REQUIRE_WHISPER=1" >> "$GITHUB_ENV"
