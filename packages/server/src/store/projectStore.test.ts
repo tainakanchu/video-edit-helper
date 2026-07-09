@@ -100,6 +100,36 @@ function mkClipAt(id: string, filePath: string, overrides: Partial<Clip> = {}): 
   });
 }
 
+/** reapplyTimeSettings テスト用: createdAt 付きファイル 1 本のクリップを作る */
+function mkTimeClip(
+  id: string,
+  opts: { cameraLabel: string; path: string; createdAt: string; recordedAt: string; dayId: string },
+): Clip {
+  return mkClip(id, {
+    dayId: opts.dayId,
+    cameraLabel: opts.cameraLabel,
+    recordedAt: opts.recordedAt,
+    files: [
+      {
+        id: `f-${id}`,
+        path: opts.path,
+        fileName: `${id}.MP4`,
+        sizeBytes: 100,
+        durationSec: 60,
+        width: 1920,
+        height: 1080,
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        fps: 30,
+        createdAt: opts.createdAt,
+        mtime: '2025-01-01T00:00:00.000Z',
+        startOffsetSec: 0,
+        playableInBrowser: true,
+      },
+    ],
+  });
+}
+
 describe('ProjectStore 永続化', () => {
   it('新規ロード時はデフォルト設定', () => {
     const store = newStore();
@@ -347,6 +377,106 @@ describe('proxyAvailable 永続化', () => {
     // 再スキャン: 同じ fileId だが proxyAvailable 未設定の新規 Clip
     store.replaceScanResult([mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
     expect(store.getClip('c1')!.files[0]!.proxyAvailable).toBe(true);
+  });
+});
+
+describe('reapplyTimeSettings(時刻補正の再スキャン不要な即時反映)', () => {
+  it('cameraTimeOffsets 設定 → recordedAt が補正分ずれ、dayId・days も更新される', () => {
+    const store = newStore();
+    store.replaceScanResult([
+      mkTimeClip('c1', {
+        cameraLabel: 'cam1',
+        path: '/media/root1/cam1/A.MP4',
+        createdAt: '2025-01-01T10:00:00.000Z',
+        recordedAt: '2025-01-01T10:00:00.000Z',
+        dayId: '2025-01-01',
+      }),
+    ]);
+    store.updateSettings({ mediaRoots: ['/media/root1'], cameraTimeOffsets: { cam1: 60 } });
+    const { changed } = store.reapplyTimeSettings();
+    expect(changed).toBe(1);
+    const c1 = store.getClip('c1')!;
+    expect(c1.recordedAt).toBe('2025-01-01T11:00:00.000Z');
+    expect(c1.dayId).toBe('2025-01-01');
+    const day = store.getState().days.find((d) => d.id === '2025-01-01');
+    expect(day?.clipIds).toContain('c1');
+  });
+
+  it('rootTimeOffsets が files[0].path とルートの照合で効く(Windows 形式 root でも)', () => {
+    const store = newStore();
+    store.replaceScanResult([
+      mkTimeClip('c2', {
+        cameraLabel: 'cam2',
+        path: 'D:\\Media\\cam2\\B.MP4',
+        createdAt: '2025-01-01T10:00:00.000Z',
+        recordedAt: '2025-01-01T10:00:00.000Z',
+        dayId: '2025-01-01',
+      }),
+    ]);
+    store.updateSettings({ mediaRoots: ['D:\\Media'], rootTimeOffsets: { 'D:\\Media': 30 } });
+    const { changed } = store.reapplyTimeSettings();
+    expect(changed).toBe(1);
+    expect(store.getClip('c2')!.recordedAt).toBe('2025-01-01T10:30:00.000Z');
+  });
+
+  it('cameraTimeOffsets が rootTimeOffsets に優先する(加算されない)', () => {
+    const store = newStore();
+    store.replaceScanResult([
+      mkTimeClip('c3', {
+        cameraLabel: 'cam3',
+        path: '/media/root1/cam3/C.MP4',
+        createdAt: '2025-01-01T10:00:00.000Z',
+        recordedAt: '2025-01-01T10:00:00.000Z',
+        dayId: '2025-01-01',
+      }),
+    ]);
+    store.updateSettings({
+      mediaRoots: ['/media/root1'],
+      cameraTimeOffsets: { cam3: 15 },
+      rootTimeOffsets: { '/media/root1': 60 },
+    });
+    store.reapplyTimeSettings();
+    expect(store.getClip('c3')!.recordedAt).toBe('2025-01-01T10:15:00.000Z');
+  });
+
+  it('2 回連続で呼んでも結果が変わらない(冪等)', () => {
+    const store = newStore();
+    store.replaceScanResult([
+      mkTimeClip('c4', {
+        cameraLabel: 'cam4',
+        path: '/media/root1/cam4/D.MP4',
+        createdAt: '2025-01-01T10:00:00.000Z',
+        recordedAt: '2025-01-01T10:00:00.000Z',
+        dayId: '2025-01-01',
+      }),
+    ]);
+    store.updateSettings({ mediaRoots: ['/media/root1'], cameraTimeOffsets: { cam4: 90 } });
+    const first = store.reapplyTimeSettings();
+    const recordedAtAfterFirst = store.getClip('c4')!.recordedAt;
+    const second = store.reapplyTimeSettings();
+    expect(first.changed).toBe(1);
+    expect(second.changed).toBe(0);
+    expect(store.getClip('c4')!.recordedAt).toBe(recordedAtAfterFirst);
+  });
+
+  it('補正を 0 に戻すと元の recordedAt に戻る', () => {
+    const store = newStore();
+    store.replaceScanResult([
+      mkTimeClip('c5', {
+        cameraLabel: 'cam5',
+        path: '/media/root1/cam5/E.MP4',
+        createdAt: '2025-01-01T10:00:00.000Z',
+        recordedAt: '2025-01-01T10:00:00.000Z',
+        dayId: '2025-01-01',
+      }),
+    ]);
+    store.updateSettings({ mediaRoots: ['/media/root1'], cameraTimeOffsets: { cam5: 45 } });
+    store.reapplyTimeSettings();
+    expect(store.getClip('c5')!.recordedAt).toBe('2025-01-01T10:45:00.000Z');
+
+    store.updateSettings({ cameraTimeOffsets: { cam5: 0 } });
+    store.reapplyTimeSettings();
+    expect(store.getClip('c5')!.recordedAt).toBe('2025-01-01T10:00:00.000Z');
   });
 });
 

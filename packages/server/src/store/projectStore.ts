@@ -17,7 +17,7 @@ import {
   type TimeRange,
 } from '@veh/shared';
 import { applyIdRemap, computeIdRemap, migrateCacheDirsSync, type CacheDirs } from './migrateIds.js';
-import { buildDays } from '../scan/grouping.js';
+import { buildDays, dayIdOf, recordedAtOf, timeOffsetMinFor } from '../scan/grouping.js';
 import { relPartsUnder } from '../media/mounts.js';
 
 // OneDrive 等の同期フォルダに置かれても壊れにくいよう、書き込みは控えめにする。
@@ -161,6 +161,44 @@ export class ProjectStore {
     this.state.settings = { ...this.state.settings, ...partial };
     this.scheduleSave();
     return this.state.settings;
+  }
+
+  /**
+   * cameraTimeOffsets / rootTimeOffsets / dayStartHour の変更を、再スキャンせず
+   * 全クリップへ即時反映する。
+   *
+   * 保存済み clip.recordedAt は「その時点の設定」で補正済みの値なので、そのまま
+   * 補正の入力にすると旧補正が焼き込まれたまま二重に補正されてしまう。そのため
+   * 毎回 files[0] の生の createdAt/mtime/durationSec から recordedAtOf() で
+   * 「補正前」の時刻を再計算する。これにより同じ設定で何度呼んでも結果が変わらない
+   * (冪等)。storedRoot は保存済みファイルパスと settings.mediaRoots を
+   * relPartsUnder で突き合わせて判定する(グルーピング時の storedRoot と同義)。
+   */
+  reapplyTimeSettings(): { changed: number } {
+    const settings = this.state.settings;
+    let changed = 0;
+    for (const clip of Object.values(this.state.clips)) {
+      const first = clip.files[0];
+      if (!first) continue;
+      const raw = recordedAtOf(first);
+      const storedRoot =
+        settings.mediaRoots.find((root) => relPartsUnder(first.path, root) !== null) ?? null;
+      const offsetMin = timeOffsetMinFor(clip.cameraLabel, storedRoot, settings);
+      const recordedAt = offsetMin
+        ? new Date(Date.parse(raw) + offsetMin * 60_000).toISOString()
+        : raw;
+      const dayId = dayIdOf(recordedAt, settings.dayStartHour);
+      if (clip.recordedAt !== recordedAt || clip.dayId !== dayId) {
+        clip.recordedAt = recordedAt;
+        clip.dayId = dayId;
+        changed++;
+      }
+    }
+    if (changed > 0) {
+      this.state.days = buildDays(Object.values(this.state.clips));
+      this.scheduleSave();
+    }
+    return { changed };
   }
 
   /**

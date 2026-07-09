@@ -89,12 +89,41 @@ export function splitNumberedName(fileName: string): { prefix: string; num: numb
   return { prefix, num: Number.isFinite(num) ? num : null };
 }
 
+/**
+ * recordedAt の算出に必要なフィールドのみの構造的型。
+ * ProbedFile はこれを満たすため既存呼び出しは無変更。project.json に保存済みの
+ * SourceFile(createdAt/mtime/durationSec を持つ)からも同じ計算を再利用できるようにする。
+ */
+export interface RecordedAtInput {
+  createdAt: string | null;
+  mtime: string;
+  durationSec: number;
+}
+
 /** recordedAt を決定: createdAt があればそれ、無ければ mtime − durationSec */
-export function recordedAtOf(file: ProbedFile): string {
+export function recordedAtOf(file: RecordedAtInput): string {
   if (file.createdAt) return file.createdAt;
   const mtimeMs = Date.parse(file.mtime);
   const corrected = mtimeMs - file.durationSec * 1000;
   return new Date(corrected).toISOString();
+}
+
+/**
+ * 撮影時刻の補正分(分)を決定する共有ヘルパ。
+ * カメラ本体時計のズレ(例: 台湾時間のまま等)を機器ごとに補正する。
+ * 機器ごとの補正(cameraTimeOffsets)が未設定なら、素材ルート単位の補正
+ * (rootTimeOffsets)にフォールバックする(優先順位: 機器 > ルート。加算ではなく上書き)。
+ */
+export function timeOffsetMinFor(
+  cameraLabel: string,
+  storedRoot: string | null,
+  settings: ProjectSettings,
+): number {
+  return (
+    settings.cameraTimeOffsets?.[cameraLabel] ??
+    (storedRoot ? settings.rootTimeOffsets?.[storedRoot] : undefined) ??
+    0
+  );
 }
 
 /** mediaRoot からの相対パス先頭セグメントを cameraLabel とする */
@@ -263,12 +292,8 @@ export function buildDaysAndClips(
       });
       const durationSec = offset;
       const cameraLabel = cameraLabelOf(first);
-      // カメラ本体時計のズレ(例: 台湾時間のまま等)を機器ごとに補正する。
-      // 機器ごとの補正(cameraTimeOffsets)が未設定なら、素材ルート単位の補正
-      // (rootTimeOffsets)にフォールバックする(優先順位: 機器 > ルート。加算ではなく上書き)。
       // 補正後の時刻を recordedAt として保存し、Day 振り分け・並び順・表示すべてに効かせる。
-      const offsetMin =
-        settings.cameraTimeOffsets?.[cameraLabel] ?? settings.rootTimeOffsets?.[first.storedRoot] ?? 0;
+      const offsetMin = timeOffsetMinFor(cameraLabel, first.storedRoot, settings);
       const rawRecordedAt = recordedAtOf(first);
       const recordedAt = offsetMin
         ? new Date(Date.parse(rawRecordedAt) + offsetMin * 60_000).toISOString()

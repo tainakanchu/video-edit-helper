@@ -206,7 +206,7 @@ export function SetupView() {
         <div className="field-group root-offsets">
           <div className="field-label">素材ルートごとの時刻補正</div>
           <p className="hint">
-            ルート配下の全素材に適用します。機器ごとの補正が指定されている素材はそちらが優先されます。変更は次のスキャンで反映。
+            ルート配下の全素材に適用します。機器ごとの補正が指定されている素材はそちらが優先されます。保存すると即座に反映されます(再スキャン不要)。
           </p>
           {nonEmptyRoots.map(root => (
             <div key={root} className="offset-row">
@@ -236,7 +236,7 @@ export function SetupView() {
         <div className="field-group camera-offsets">
           <div className="field-label">機器ごとの時刻補正</div>
           <p className="hint">
-            本体時計がずれている機器を分単位で補正します(例: 台湾時間のまま撮った機器を日本時間に合わせるなら <b>+60</b>)。撮影時刻・Day 振り分け・並び順に反映され、変更は次のスキャンで適用されます。
+            本体時計がずれている機器を分単位で補正します(例: 台湾時間のまま撮った機器を日本時間に合わせるなら <b>+60</b>)。撮影時刻・Day 振り分け・並び順に反映され、保存すると即座に反映されます(再スキャン不要)。
           </p>
           {cameras.map(cam => (
             <div key={cam} className="offset-row">

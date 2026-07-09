@@ -175,7 +175,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.put(apiPaths.settings(), async (req, reply): Promise<ProjectResponse | void> => {
     const parsed = settingsSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, parsed.error.message);
-    store.updateSettings(parsed.data.settings);
+    const { settings } = parsed.data;
+    store.updateSettings(settings);
+    // 時刻補正系の設定変更は再スキャン不要で即時反映する
+    if ('cameraTimeOffsets' in settings || 'rootTimeOffsets' in settings || 'dayStartHour' in settings) {
+      store.reapplyTimeSettings();
+    }
     return { project: store.getState() };
   });
 
