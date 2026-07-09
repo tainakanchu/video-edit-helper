@@ -41,6 +41,7 @@ export const SHORTCUTS: ShortcutHelp[] = [
   { keys: ', / .', desc: '1 秒戻る / 進む(微調整)' },
   { keys: '← / →', desc: '10 秒戻る / 進む' },
   { keys: 'Shift + ← / →', desc: '1 分戻る / 進む' },
+  { keys: 'Shift + , / .', desc: '前 / 次のクリップへ移動' },
   { keys: 'Home / End', desc: 'クリップ先頭 / 末尾へ' },
   { keys: 'M', desc: '現在位置にマーカーを打つ(ラフ・即時)' },
   { keys: '↑ / ↓', desc: '前 / 次のマーカーへジャンプ' },

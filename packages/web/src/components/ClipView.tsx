@@ -3,6 +3,7 @@ import { formatTime, type ID } from '@veh/shared';
 import { isEditableTarget, rateDown, rateUp, SKIP_LARGE, SKIP_SMALL } from '../lib/keyboard';
 import { nextSceneTime, prevSceneTime } from '../lib/sceneNav';
 import { nextMarkerTime, prevMarkerTime } from '../lib/markerNav';
+import { adjacentClipIds } from '../lib/clipNav';
 import { PlayerProvider, usePlayer } from './PlayerContext';
 import { Player } from './Player';
 import { ThumbnailStrip } from './ThumbnailStrip';
@@ -72,6 +73,29 @@ function ClipViewInner() {
 
   const backToDay = () =>
     navigate(day ? { name: 'day', dayId: day.id } : { name: 'home' });
+
+  // 次 / 前のクリップ(Day 境界をまたぐ全クリップ通し順。先頭/末尾では null)
+  const { prevId: prevClipId, nextId: nextClipId } = adjacentClipIds(days, clip.id);
+  const prevClip = prevClipId ? project?.clips[prevClipId] : undefined;
+  const nextClip = nextClipId ? project?.clips[nextClipId] : undefined;
+
+  // 最新の隣接クリップ ID を参照するための ref(キーハンドラの依存を増やさない)
+  const prevClipIdRef = useRef<ID | null>(null);
+  prevClipIdRef.current = prevClipId;
+  const nextClipIdRef = useRef<ID | null>(null);
+  nextClipIdRef.current = nextClipId;
+
+  const goPrevClip = () => {
+    const id = prevClipIdRef.current;
+    if (id) navigate({ name: 'clip', clipId: id, t: null });
+    else toast('最初のクリップです', 'info');
+  };
+
+  const goNextClip = () => {
+    const id = nextClipIdRef.current;
+    if (id) navigate({ name: 'clip', clipId: id, t: null });
+    else toast('最後のクリップです', 'info');
+  };
 
   // 最新の pendingIn を参照するための ref(キーハンドラの依存を増やさない)
   const pendingInRef = useRef<number | null>(null);
@@ -183,11 +207,22 @@ function ClipViewInner() {
           break;
         case ',':
           e.preventDefault();
-          p.seekBy(-1);
+          if (e.shiftKey) goPrevClip(); // Shift + , = 前のクリップへ
+          else p.seekBy(-1);
           break;
         case '.':
           e.preventDefault();
-          p.seekBy(1);
+          if (e.shiftKey) goNextClip(); // Shift + . = 次のクリップへ
+          else p.seekBy(1);
+          break;
+        // Shift + , / . は環境によって e.key が '<' '>' として届く場合がある
+        case '<':
+          e.preventDefault();
+          goPrevClip();
+          break;
+        case '>':
+          e.preventDefault();
+          goNextClip();
           break;
         case 'ArrowLeft':
           e.preventDefault();
@@ -287,11 +322,27 @@ function ClipViewInner() {
         <button className="ghost" onClick={backToDay} title="戻る (Esc)">
           ← 戻る
         </button>
+        <button
+          className="ghost"
+          onClick={goPrevClip}
+          disabled={!prevClip}
+          title={prevClip ? `前のクリップへ: ${prevClip.name} (Shift + ,)` : '前のクリップはありません'}
+        >
+          ← 前
+        </button>
         <span className="path">
           <b>Day {day?.index ?? '?'}</b>
           {' > '}
           <b>{clip.name}</b>
         </span>
+        <button
+          className="ghost"
+          onClick={goNextClip}
+          disabled={!nextClip}
+          title={nextClip ? `次のクリップへ: ${nextClip.name} (Shift + .)` : '次のクリップはありません'}
+        >
+          次 →
+        </button>
         <span className="spacer" style={{ flex: 1 }} />
         {scenesActive ? (
           <span className="scene-state muted" title="場面転換検出を実行中です">
