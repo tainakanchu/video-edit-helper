@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1C2128"/>
+      <stop offset="1" stop-color="#111318"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4AA3FF"/>
+      <stop offset="1" stop-color="#57C97A"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="frameFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A424E"/>
+      <stop offset="1" stop-color="#2E353F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- タイル(角丸スクエア, 余白96, 半径≈22.4%) -->
+  <rect x="96" y="96" width="832" height="832" rx="186" fill="url(#tile)"/>
+  <rect x="96" y="96" width="832" height="832" rx="186" fill="url(#gloss)"/>
+
+  <!-- フィルムストリップ本体(近黒バンド) -->
+  <rect x="156" y="316" width="712" height="392" rx="28" fill="#0B0D11"/>
+
+  <!-- パーフォレーション(上下) -->
+  <rect x="186" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="241" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="296" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="351" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="406" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="461" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="516" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="571" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="626" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="681" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="736" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="791" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="846" y="330" width="24" height="32" rx="6" fill="#2B303A"/>
+  <rect x="186" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="241" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="296" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="351" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="406" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="461" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="516" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="571" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="626" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="681" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="736" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="791" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+<rect x="846" y="662" width="24" height="32" rx="6" fill="#2B303A"/>
+
+  <!-- 左右フレーム(未選定の素材) -->
+  <rect x="228" y="406" width="160" height="212" rx="18" fill="url(#frameFill)"/>
+  <rect x="636" y="406" width="160" height="212" rx="18" fill="url(#frameFill)"/>
+
+  <!-- 中央=選定フレーム(青→緑の塗り, 小サイズでも生き残る色ブロック) -->
+  <rect x="414" y="386" width="196" height="252" rx="24" fill="url(#hero)"/>
+
+  <!-- 白チェック -->
+  <path d="M462 516 L497 552 L564 458" fill="none" stroke="#ffffff"
+        stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
