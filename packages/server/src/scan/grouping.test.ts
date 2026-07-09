@@ -356,3 +356,42 @@ describe('指紋方式の ID(パス非依存・内容固有)', () => {
     expect(fileIdOf(base)).not.toBe(clipIdOf(base));
   });
 });
+
+describe('カメラ別 時刻補正 (cameraTimeOffsets)', () => {
+  const files = [
+    file({
+      path: '/media/vlog/A.MP4',
+      fileName: 'A.MP4',
+      dir: '/media/vlog',
+      createdAt: '2025-05-01T20:00:00.000Z',
+    }),
+    file({
+      path: '/media/xiaomi/B.MP4',
+      fileName: 'B.MP4',
+      dir: '/media/xiaomi',
+      createdAt: '2025-05-01T20:00:00.000Z',
+    }),
+  ];
+
+  it('cameraLabel ごとの補正分だけ recordedAt をずらす(他機器は不変)', () => {
+    const withOffset: ProjectSettings = { ...settings, cameraTimeOffsets: { vlog: 60 } };
+    const { clips } = buildDaysAndClips(files, withOffset);
+    const vlog = clips.find((c) => c.cameraLabel === 'vlog')!;
+    const xiaomi = clips.find((c) => c.cameraLabel === 'xiaomi')!;
+    expect(vlog.recordedAt).toBe('2025-05-01T21:00:00.000Z'); // +60分
+    expect(xiaomi.recordedAt).toBe('2025-05-01T20:00:00.000Z'); // 補正なし
+  });
+
+  it('負の補正も効く', () => {
+    const withOffset: ProjectSettings = { ...settings, cameraTimeOffsets: { vlog: -90 } };
+    const { clips } = buildDaysAndClips(files, withOffset);
+    const vlog = clips.find((c) => c.cameraLabel === 'vlog')!;
+    expect(vlog.recordedAt).toBe('2025-05-01T18:30:00.000Z'); // -90分
+  });
+
+  it('未設定(既定)は recordedAt を変えない', () => {
+    const { clips } = buildDaysAndClips(files, settings);
+    const vlog = clips.find((c) => c.cameraLabel === 'vlog')!;
+    expect(vlog.recordedAt).toBe('2025-05-01T20:00:00.000Z');
+  });
+});

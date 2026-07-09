@@ -91,6 +91,13 @@ export interface ProjectSettings {
   thumbFineIntervalSec: number;
   /** true なら再生可能な素材(4K 等)も含め全ファイルのプロキシを生成する */
   proxyAllFiles: boolean;
+  /**
+   * カメラ(cameraLabel = メディアルート直下のフォルダ名)ごとの撮影時刻の補正(分, 符号付き)。
+   * 例: 本体時計が台湾時間(UTC+8)のまま日本時間(UTC+9)として扱われる機器は +60。
+   * 撮影時刻(recordedAt)にこの分だけ加算され、Day 振り分け・並び順・表示に反映される。
+   * 未設定(0)の機器は補正なし。スキャン時に適用されるため、変更後は再スキャンが必要。
+   */
+  cameraTimeOffsets?: Record<string, number>;
 }
 
 /** 選定範囲(Phase 2)。付箋からの昇格またはイン/アウト点打ちで作成 */

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { ProjectSettings } from '@veh/shared'
 import { defaultSettings } from '@veh/shared'
 import { useAppStore } from '../store/useAppStore'
@@ -27,6 +27,27 @@ export function SetupView() {
     String(initSettings.thumbFineIntervalSec)
   )
   const [proxyAllFiles, setProxyAllFiles] = useState<boolean>(initSettings.proxyAllFiles)
+  // 機器(cameraLabel)ごとの時刻補正(分)。入力の途中(空/"-")を許すため文字列で保持
+  const [cameraOffsets, setCameraOffsets] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(initSettings.cameraTimeOffsets ?? {})) out[k] = String(v)
+    return out
+  })
+
+  // スキャン済みで検出された機器 + 既に補正設定済みのラベルを一覧化
+  const cameras = useMemo(() => {
+    const set = new Set<string>()
+    if (project) for (const c of Object.values(project.clips)) set.add(c.cameraLabel)
+    for (const k of Object.keys(cameraOffsets)) set.add(k)
+    return Array.from(set).sort()
+  }, [project, cameraOffsets])
+
+  function bumpOffset(cam: string, deltaMin: number) {
+    setCameraOffsets(prev => {
+      const cur = Math.trunc(Number(prev[cam] ?? '0')) || 0
+      return { ...prev, [cam]: String(cur + deltaMin) }
+    })
+  }
 
   const scanJob = jobs.find(
     j => j.type === 'scan' && (j.status === 'running' || j.status === 'queued')
@@ -38,12 +59,18 @@ export function SetupView() {
     const dsh = Number(dayStartHour)
     const tci = Number(thumbCoarseIntervalSec)
     const tfi = Number(thumbFineIntervalSec)
+    const cameraTimeOffsets: Record<string, number> = {}
+    for (const [label, raw] of Object.entries(cameraOffsets)) {
+      const n = Math.trunc(Number(raw))
+      if (Number.isFinite(n) && n !== 0) cameraTimeOffsets[label] = n
+    }
     return {
       mediaRoots: roots.filter(Boolean),
       dayStartHour: isNaN(dsh) ? defaultSettings.dayStartHour : dsh,
       thumbCoarseIntervalSec: isNaN(tci) ? defaultSettings.thumbCoarseIntervalSec : tci,
       thumbFineIntervalSec: isNaN(tfi) ? defaultSettings.thumbFineIntervalSec : tfi,
       proxyAllFiles,
+      cameraTimeOffsets,
     }
   }
 
@@ -152,6 +179,36 @@ export function SetupView() {
           再生可能な素材も含め全ファイルのプロキシを生成(4K 素材が重い場合に)
         </label>
       </div>
+
+      {cameras.length > 0 && (
+        <div className="field-group camera-offsets">
+          <div className="field-label">機器ごとの時刻補正</div>
+          <p className="hint">
+            本体時計がずれている機器を分単位で補正します(例: 台湾時間のまま撮った機器を日本時間に合わせるなら <b>+60</b>)。撮影時刻・Day 振り分け・並び順に反映され、変更は次のスキャンで適用されます。
+          </p>
+          {cameras.map(cam => (
+            <div key={cam} className="offset-row">
+              <span className="offset-cam" title={cam}>{cam}</span>
+              <div className="offset-input">
+                <button className="ghost" onClick={() => bumpOffset(cam, -60)} disabled={scanning}>
+                  −1h
+                </button>
+                <input
+                  type="number"
+                  value={cameraOffsets[cam] ?? ''}
+                  placeholder="0"
+                  onChange={e => setCameraOffsets(prev => ({ ...prev, [cam]: e.target.value }))}
+                  disabled={scanning}
+                />
+                <button className="ghost" onClick={() => bumpOffset(cam, 60)} disabled={scanning}>
+                  +1h
+                </button>
+                <span className="offset-unit">分</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {scanning && (
         <div>

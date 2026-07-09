@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '../store/useAppStore'
-import type { JobInfo } from '@veh/shared'
 
 function jobTypeLabel(type: string): string {
   switch (type) {
@@ -28,10 +27,21 @@ function jobStatusLabel(status: string): string {
 
 export function JobsIndicator() {
   const jobs = useAppStore(s => s.jobs)
+  const clips = useAppStore(s => s.project?.clips)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
+  // clipId → 「どのクリップか」が一目で分かる表示名(名前+カメララベル)
+  function clipLabel(clipId?: string): string | null {
+    if (!clipId) return null
+    const c = clips?.[clipId]
+    if (!c) return null
+    return c.cameraLabel ? `${c.name}(${c.cameraLabel})` : c.name
+  }
+
   const activeJobs = jobs.filter(j => j.status === 'running' || j.status === 'queued')
+  const runningJobs = activeJobs.filter(j => j.status === 'running')
+  const queuedCount = activeJobs.length - runningJobs.length
 
   useEffect(() => {
     if (!open) return
@@ -44,9 +54,9 @@ export function JobsIndicator() {
     return () => document.removeEventListener('click', handleClick)
   }, [open])
 
-  const avgProgress = activeJobs.length > 0
-    ? activeJobs.reduce((sum, j) => sum + j.progress, 0) / activeJobs.length
-    : 0
+  // 折りたたみ時に「今なにをやっているか」を代表表示する(実行中を優先)
+  const current = runningJobs[0] ?? activeJobs[0]
+  const currentLabel = current ? clipLabel(current.clipId) : null
 
   const typeGroups: Record<string, number> = {}
   for (const j of activeJobs) {
@@ -69,24 +79,56 @@ export function JobsIndicator() {
         </button>
       ) : (
         <button className="pill" onClick={() => setOpen(v => !v)}>
-          {`実行中 ${activeJobs.length} (${typeBreakdown})`}
-          <div className="bar">
-            <span style={{ width: `${Math.round(avgProgress * 100)}%` }} />
-          </div>
+          <span className="dot" />
+          <span className="pill-body">
+            <span className="pill-line">
+              <span className="pill-type">{current ? jobTypeLabel(current.type) : ''}</span>
+              {currentLabel && <span className="pill-target">{currentLabel}</span>}
+              {activeJobs.length > 1 && (
+                <span className="pill-more">ほか{activeJobs.length - 1}件</span>
+              )}
+            </span>
+            <span className="bar thin">
+              <span style={{ width: `${Math.round((current?.progress ?? 0) * 100)}%` }} />
+            </span>
+          </span>
         </button>
       )}
       {open && (
         <div className="jobs-popover">
-          {sortedJobs.map(j => (
-            <div key={j.id} className="job-row">
-              <span className="jt">{jobTypeLabel(j.type)}</span>
-              <span className="jstatus">{jobStatusLabel(j.status)}</span>
-              {(j.status === 'running' || j.status === 'queued') && (
-                <span>{Math.round(j.progress * 100)}%</span>
-              )}
-              {j.error != null && <span>{j.error}</span>}
-            </div>
-          ))}
+          <div className="jobs-summary">
+            {activeJobs.length > 0
+              ? `実行中 ${runningJobs.length} · 待機 ${queuedCount}`
+              : '実行中のジョブはありません'}
+            {typeBreakdown && <div className="jobs-breakdown">{typeBreakdown}</div>}
+          </div>
+          {sortedJobs.slice(0, 40).map(j => {
+            const active = j.status === 'running' || j.status === 'queued'
+            const label = clipLabel(j.clipId)
+            return (
+              <div key={j.id} className={`job-row ${j.status}`}>
+                <div className="job-head">
+                  <span className="jt">{jobTypeLabel(j.type)}</span>
+                  <span className="jstatus">
+                    {jobStatusLabel(j.status)}
+                    {active ? ` ${Math.round(j.progress * 100)}%` : ''}
+                  </span>
+                </div>
+                {label ? (
+                  <div className="jtarget">{label}</div>
+                ) : j.type === 'scan' ? (
+                  <div className="jtarget dim">全体スキャン</div>
+                ) : null}
+                {active && (
+                  <div className="bar thin">
+                    <span style={{ width: `${Math.round(j.progress * 100)}%` }} />
+                  </div>
+                )}
+                {active && j.message && <div className="jmsg">{j.message}</div>}
+                {j.error != null && <div className="jerror">{j.error}</div>}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

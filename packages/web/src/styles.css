@@ -372,6 +372,40 @@ a {
   width: 100px;
 }
 
+.field-group {
+  margin: 16px 0;
+}
+.field-group .field-label {
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.camera-offsets .offset-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
+}
+.camera-offsets .offset-cam {
+  width: 200px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.camera-offsets .offset-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.camera-offsets .offset-input input {
+  width: 80px;
+  text-align: right;
+}
+.camera-offsets .offset-unit {
+  color: var(--text-dim);
+}
+
 /* ---- ClipView ---- */
 .clipview {
   display: flex;
@@ -729,6 +763,47 @@ a {
   padding: 8px;
   z-index: 50;
 }
+.jobs-indicator .pill-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+  max-width: 260px;
+}
+.jobs-indicator .pill-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  overflow: hidden;
+}
+.jobs-indicator .pill-type {
+  white-space: nowrap;
+}
+.jobs-indicator .pill-target {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jobs-indicator .pill-more {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.jobs-summary {
+  padding: 2px 6px 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.jobs-breakdown {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
 .job-row {
   padding: 6px;
   border-bottom: 1px solid var(--border);
@@ -736,14 +811,44 @@ a {
 .job-row:last-child {
   border-bottom: none;
 }
-.job-row .jt {
+.job-head {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  align-items: baseline;
+}
+.job-row .jt {
+  font-size: 12px;
 }
 .job-row .jstatus {
   font-size: 11px;
   color: var(--text-dim);
+  white-space: nowrap;
+}
+.job-row .jtarget {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.job-row .jtarget.dim {
+  color: var(--text-dim);
+}
+.job-row .jmsg {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.job-row .jerror {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--danger);
+  word-break: break-word;
 }
 
 /* ---- HelpOverlay / モーダル ---- */

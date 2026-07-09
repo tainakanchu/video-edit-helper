@@ -259,12 +259,19 @@ export function buildDaysAndClips(
         return sf;
       });
       const durationSec = offset;
-      const recordedAt = recordedAtOf(first);
+      const cameraLabel = cameraLabelOf(first);
+      // カメラ本体時計のズレ(例: 台湾時間のまま等)を機器ごとに補正する。
+      // 補正後の時刻を recordedAt として保存し、Day 振り分け・並び順・表示すべてに効かせる。
+      const offsetMin = settings.cameraTimeOffsets?.[cameraLabel] ?? 0;
+      const rawRecordedAt = recordedAtOf(first);
+      const recordedAt = offsetMin
+        ? new Date(Date.parse(rawRecordedAt) + offsetMin * 60_000).toISOString()
+        : rawRecordedAt;
       const clip: Clip = {
         id: clipId,
         dayId: dayIdOf(recordedAt, settings.dayStartHour),
         name: first.fileName,
-        cameraLabel: cameraLabelOf(first),
+        cameraLabel,
         files: sourceFiles,
         durationSec,
         recordedAt,
