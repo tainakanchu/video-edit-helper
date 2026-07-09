@@ -4,6 +4,7 @@ import type { ProjectSettings } from '@veh/shared';
 import { ffprobe } from './ffprobe.js';
 import { buildDaysAndClips, type GroupingResult, type ProbedFile } from './grouping.js';
 import { resolveMediaRoot } from './winpath.js';
+import { resolveMediaPath, toStoredPath, type MountMap } from '../media/mounts.js';
 
 const VIDEO_EXTS = new Set(['.mp4', '.mov', '.m4v']);
 const PROBE_CONCURRENCY = 4;
@@ -63,35 +64,72 @@ export async function walkMediaRoot(mediaRoot: string): Promise<FoundFile[]> {
 
 export interface ScanResult extends GroupingResult {
   probedCount: number;
+  /** 走査に成功したルート(保存形。project.json の mediaRoots と同じ表記) */
+  scannedRoots: string[];
+  /** 解決できず走査をスキップしたルート(保存形) */
+  missingRoots: string[];
+}
+
+/** mediaRoot 解決の結果(純関数。実 FS へは opts.exists 経由でのみアクセス) */
+export interface ScanRootResolution {
+  /** 実際に走査する実パス(resolveMediaRoot 済み) */
+  resolvedRoots: string[];
+  /** 走査に成功したルートの保存形(mediaRoots の要素そのもの) */
+  scannedRoots: string[];
+  /** 解決できなかったルートの保存形 */
+  missingRoots: string[];
+}
+
+/**
+ * 保存形の mediaRoots を実パスへ解決する純関数。
+ * 1. mounts 対応表(root → このマシンでのマウント先)を適用
+ * 2. resolveMediaRoot で実在確認(WSL 上の Windows パスは /mnt/<drive>/ へ自動変換)
+ * mounts に対応が無いルートは素通しするので、同一マシンでの再スキャン(対応表なし)でも従来通り動く。
+ */
+export function resolveScanRoots(
+  mediaRoots: string[],
+  mounts: MountMap,
+  opts: { platform?: NodeJS.Platform; exists?: (p: string) => boolean } = {},
+): ScanRootResolution {
+  const resolvedRoots: string[] = [];
+  const scannedRoots: string[] = [];
+  const missingRoots: string[] = [];
+  for (const root of mediaRoots) {
+    const mapped = resolveMediaPath(root, [root], mounts);
+    const resolved = resolveMediaRoot(mapped, opts);
+    if (resolved) {
+      resolvedRoots.push(resolved);
+      scannedRoots.push(root);
+    } else {
+      missingRoots.push(root);
+    }
+  }
+  return { resolvedRoots, scannedRoots, missingRoots };
 }
 
 /**
  * mediaRoots を走査・ffprobe(並列 4)してグルーピングする。
  * onProgress(probed, total) でジョブ進捗を更新。
+ * mounts(cross-OS のマウント対応表)を渡すと、保存形ルートをこのマシンの実パスへ解決してから走査する。
  */
 export async function scanMediaRoots(
   mediaRoots: string[],
   settings: ProjectSettings,
   ffprobePath: string,
   onProgress?: (probed: number, total: number) => void,
+  mounts?: MountMap,
 ): Promise<ScanResult> {
-  // mediaRoot の実在解決(WSL 上の Windows パスは /mnt/<drive>/ へ自動変換)
-  const resolvedRoots: string[] = [];
-  const missing: string[] = [];
-  for (const root of mediaRoots) {
-    const resolved = resolveMediaRoot(root);
-    if (resolved) resolvedRoots.push(resolved);
-    else missing.push(root);
-  }
+  const { resolvedRoots, scannedRoots, missingRoots } = resolveScanRoots(mediaRoots, mounts ?? {});
   if (resolvedRoots.length === 0) {
     throw new Error(
-      `メディアルートが見つかりません: ${missing.join(' / ')}。` +
+      `メディアルートが見つかりません: ${missingRoots.join(' / ')}。` +
         `フォルダの存在とパスの綴りを確認してください` +
-        (process.platform === 'linux' ? '(Windows パスは /mnt/<ドライブ>/ に自動変換して探しています)' : ''),
+        (process.platform === 'linux' ? '(Windows パスは /mnt/<ドライブ>/ に自動変換して探しています)' : '') +
+        '。別 OS で撮影した素材の場合は、設定→マウント対応表も確認してください。',
     );
   }
-  if (missing.length > 0) {
-    console.warn(`[scan] 見つからないメディアルートをスキップ: ${missing.join(' / ')}`);
+  if (missingRoots.length > 0) {
+    console.warn(`[scan] 見つからないメディアルートをスキップ: ${missingRoots.join(' / ')}`);
   }
 
   // 全 mediaRoot を走査
@@ -152,6 +190,18 @@ export async function scanMediaRoots(
 
   await Promise.all(Array.from({ length: PROBE_CONCURRENCY }, () => worker()));
 
+  // 走査・ffprobe・グルーピングまでは実パスのまま行う(cameraLabelOf が path.relative で
+  // mediaRoot からの相対セグメントを見るため)。ここで初めて保存形パスへ戻す。
   const grouping = buildDaysAndClips(probed, settings);
-  return { ...grouping, probedCount: probed.length };
+  const clips = grouping.clips.map((c) => ({
+    ...c,
+    files: c.files.map((f) => ({ ...f, path: toStoredPath(f.path, mediaRoots, mounts ?? {}) })),
+  }));
+  return {
+    days: grouping.days,
+    clips,
+    probedCount: probed.length,
+    scannedRoots,
+    missingRoots,
+  };
 }

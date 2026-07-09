@@ -444,7 +444,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const out = renderExport(
         format as ExportFormat,
         selections,
-        (id) => store.getClip(id),
+        // 保存済みパスをこのマシンの実パスへ解決してから埋め込む(別 OS で開いた場合の cross-OS 対応)
+        (id) => {
+          const clip = store.getClip(id);
+          return clip ? mounts.resolveClip(clip, store.getSettings().mediaRoots) : undefined;
+        },
         day.date,
       );
       const fileName = `roughcut-${day.date}.${out.fileExt}`;

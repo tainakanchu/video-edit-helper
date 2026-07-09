@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveMediaPath, relPartsUnder, MountStore } from './mounts.js';
+import { resolveMediaPath, relPartsUnder, toStoredPath, MountStore } from './mounts.js';
 
 describe('relPartsUnder', () => {
   it('Windows パスの相対セグメントを取り出す(区切り正規化)', () => {
@@ -43,6 +43,51 @@ describe('resolveMediaPath', () => {
     expect(
       resolveMediaPath('E:\\Other\\a.mp4', ['D:\\Footage'], { 'D:\\Footage': '/Volumes/Footage' }),
     ).toBe('E:\\Other\\a.mp4');
+  });
+});
+
+describe('toStoredPath', () => {
+  it('Windows 形式 root の往復: resolveMediaPath → toStoredPath で保存形に戻る(区切りは \\ のまま)', () => {
+    const mounts = { 'D:\\movie raw\\環島': '/Volumes/COLDLINE/movie raw/環島' };
+    const roots = ['D:\\movie raw\\環島'];
+    const resolved = resolveMediaPath('D:\\movie raw\\環島\\Day1\\Clip.MP4', roots, mounts);
+    expect(resolved).toBe('/Volumes/COLDLINE/movie raw/環島/Day1/Clip.MP4');
+    const back = toStoredPath(resolved, roots, mounts);
+    expect(back).toBe('D:\\movie raw\\環島\\Day1\\Clip.MP4');
+  });
+
+  it('POSIX root: 実パス → 保存形(区切りは / のまま)', () => {
+    const mounts = { '/Volumes/Footage': 'D:\\Footage' };
+    const roots = ['/Volumes/Footage'];
+    const back = toStoredPath('D:\\Footage\\Taiwan\\clip.mp4', roots, mounts);
+    expect(back).toBe('/Volumes/Footage/Taiwan/clip.mp4');
+  });
+
+  it('どの root にも該当しなければ localPath をそのまま返す', () => {
+    const mounts = { 'D:\\Footage': '/Volumes/Footage' };
+    expect(toStoredPath('/Volumes/Other/a.mp4', ['D:\\Footage'], mounts)).toBe(
+      '/Volumes/Other/a.mp4',
+    );
+    expect(toStoredPath('/Volumes/Other/a.mp4', ['D:\\Footage'], {})).toBe('/Volumes/Other/a.mp4');
+  });
+
+  it('localPath が root(=マウント先)自身のとき root が返る', () => {
+    const mounts = { 'D:\\Footage': '/Volumes/Footage' };
+    expect(toStoredPath('/Volumes/Footage', ['D:\\Footage'], mounts)).toBe('D:\\Footage');
+  });
+
+  it('区切り・大文字小文字の混在でも canonical 比較が効く', () => {
+    const mounts = { 'D:\\Footage': '/Volumes/Footage' };
+    // マウント先の実パスが Windows 風の区切り・ドライブ大文字小文字違いで来ても一致する
+    const back = toStoredPath('d:/Footage/Taiwan/Clip.MP4', ['D:\\Footage'], {
+      'D:\\Footage': 'd:/Footage',
+    });
+    expect(back).toBe('D:\\Footage\\Taiwan\\Clip.MP4');
+    // POSIX 側でも大文字小文字混在パスが一致する(canonicalMediaPath はドライブ文字以外は
+    // 大小文字を変えないため、ここでは区切りの揺れのみ確認)
+    expect(
+      toStoredPath('/Volumes/Footage/Taiwan/clip.mp4', ['/Volumes/Footage'], mounts),
+    ).toBe('/Volumes/Footage/Taiwan/clip.mp4');
   });
 });
 

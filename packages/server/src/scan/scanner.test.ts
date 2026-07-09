@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { isIgnoredDir, walkMediaRoot } from './scanner.js';
+import { isIgnoredDir, resolveScanRoots, walkMediaRoot } from './scanner.js';
 
 describe('isIgnoredDir', () => {
   it('隠し/ゴミ箱/システムフォルダを除外する(大文字小文字問わず)', () => {
@@ -43,5 +43,54 @@ describe('walkMediaRoot', () => {
     const found = await walkMediaRoot(root);
     const names = found.map((f) => f.fileName).sort();
     expect(names).toEqual(['a.mp4', 'b.mov']);
+  });
+});
+
+describe('resolveScanRoots(mounts 対応表によるルート解決)', () => {
+  it('対応表が無ければ保存形ルートをそのまま実在確認する', () => {
+    const result = resolveScanRoots(['/media/footage'], {}, {
+      platform: 'darwin',
+      exists: (p) => p === '/media/footage',
+    });
+    expect(result.resolvedRoots).toEqual(['/media/footage']);
+    expect(result.scannedRoots).toEqual(['/media/footage']);
+    expect(result.missingRoots).toEqual([]);
+  });
+
+  it('対応表があれば保存形ルート(D:\\...)をこのマシンのマウント先へ変換して解決する', () => {
+    const root = 'D:\\movie raw\\環島';
+    const mounted = '/Volumes/COLDLINE/movie raw/環島';
+    const result = resolveScanRoots([root], { [root]: mounted }, {
+      platform: 'darwin',
+      exists: (p) => p === mounted,
+    });
+    expect(result.resolvedRoots).toEqual([mounted]);
+    // scannedRoots は保存形(project.json の mediaRoots と同じ表記)のまま返す
+    expect(result.scannedRoots).toEqual([root]);
+    expect(result.missingRoots).toEqual([]);
+  });
+
+  it('対応表のマウント先が実在しなければ missingRoots に入る(保存形のまま)', () => {
+    const root = 'D:\\movie raw\\環島';
+    const mounted = '/Volumes/COLDLINE/movie raw/環島';
+    const result = resolveScanRoots([root], { [root]: mounted }, {
+      platform: 'darwin',
+      exists: () => false,
+    });
+    expect(result.resolvedRoots).toEqual([]);
+    expect(result.scannedRoots).toEqual([]);
+    expect(result.missingRoots).toEqual([root]);
+  });
+
+  it('複数ルートのうち一部だけ解決できる場合は resolved/missing に分けて返す', () => {
+    const ok = '/media/ok';
+    const ng = '/media/ng';
+    const result = resolveScanRoots([ok, ng], {}, {
+      platform: 'darwin',
+      exists: (p) => p === ok,
+    });
+    expect(result.resolvedRoots).toEqual([ok]);
+    expect(result.scannedRoots).toEqual([ok]);
+    expect(result.missingRoots).toEqual([ng]);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectSettings } from '@veh/shared';
+import type { Clip, ProjectSettings } from '@veh/shared';
 import {
+  buildDays,
   buildDaysAndClips,
   cameraLabelOf,
   clipIdOf,
@@ -313,6 +314,42 @@ describe('Day.index と clipId 安定性', () => {
       createdAt: null,
     };
     expect(clipIdOf(fp)).toHaveLength(12);
+  });
+});
+
+describe('buildDays(Day 構築部分を抽出した純関数)', () => {
+  function clip(overrides: Partial<Clip> & { id: string; dayId: string; recordedAt: string }): Clip {
+    return {
+      name: `${overrides.id}.MP4`,
+      cameraLabel: 'cam',
+      files: [],
+      durationSec: 60,
+      reviewStatus: 'unreviewed',
+      watchedRanges: [],
+      ...overrides,
+    };
+  }
+
+  it('dayId ごとに集約し日付昇順で index を振る(buildDaysAndClips と同じ結果)', () => {
+    const clips = [
+      clip({ id: 'a', dayId: '2025-01-03', recordedAt: '2025-01-03T10:00:00.000Z' }),
+      clip({ id: 'b', dayId: '2025-01-01', recordedAt: '2025-01-01T10:00:00.000Z' }),
+    ];
+    const days = buildDays(clips);
+    expect(days.map((d) => [d.date, d.index])).toEqual([
+      ['2025-01-01', 1],
+      ['2025-01-03', 2],
+    ]);
+  });
+
+  it('同一 Day 内は recordedAt 昇順(同時刻はクリップ名で安定化)', () => {
+    const clips = [
+      clip({ id: 'z', dayId: '2025-01-01', recordedAt: '2025-01-01T09:00:00.000Z' }),
+      clip({ id: 'a', dayId: '2025-01-01', recordedAt: '2025-01-01T09:00:00.000Z' }),
+    ];
+    const days = buildDays(clips);
+    expect(days).toHaveLength(1);
+    expect(days[0]!.clipIds).toEqual(['a', 'z']);
   });
 });
 

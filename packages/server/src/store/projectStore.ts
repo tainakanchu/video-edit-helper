@@ -7,7 +7,6 @@ import {
   defaultSettings,
   normalizeRanges,
   type Clip,
-  type Day,
   type ID,
   type Note,
   type NoteStatus,
@@ -18,6 +17,8 @@ import {
   type TimeRange,
 } from '@veh/shared';
 import { applyIdRemap, computeIdRemap, migrateCacheDirsSync, type CacheDirs } from './migrateIds.js';
+import { buildDays } from '../scan/grouping.js';
+import { relPartsUnder } from '../media/mounts.js';
 
 // OneDrive 等の同期フォルダに置かれても壊れにくいよう、書き込みは控えめにする。
 // (頻繁な書き込み=タイムスタンプ更新は同期先で偽の競合やチャーンの原因になる)
@@ -167,8 +168,13 @@ export class ProjectStore {
    * 同一 clipId の既存クリップの reviewStatus / watchedRanges は必ず保持。
    * 同一 fileId の proxyAvailable フラグも引き継ぐ。
    * notes / selections は孤児も含め一切削除しない。
+   *
+   * opts.scannedRoots(今回の走査に成功したルート・保存形)を渡すと、そのどれの配下にも
+   * 無い既存クリップ(= 未接続ドライブ等で今回は走査対象外だった素材)を消さずに保持する。
+   * 同じ clipId が新スキャン結果にもあれば新しい方を優先する(未指定時は従来通り全置換)。
+   * days 引数は廃止し、保持後の全クリップから buildDays で内部状態へ再構築する。
    */
-  replaceScanResult(days: Day[], clips: Clip[]): void {
+  replaceScanResult(clips: Clip[], opts?: { scannedRoots?: string[] }): { preservedCount: number } {
     // 既存ファイルの proxyAvailable を fileId で引き継ぐためのインデックス
     const prevProxy = new Map<ID, boolean>();
     for (const c of Object.values(this.state.clips)) {
@@ -195,10 +201,28 @@ export class ProjectStore {
         newClips[c.id] = { ...c, files };
       }
     }
-    this.state.days = days;
+
+    // 未接続ルート配下の既存クリップは保持する(新スキャン結果に同じ clipId があればそちらを優先)
+    let preservedCount = 0;
+    const scannedRoots = opts?.scannedRoots;
+    if (scannedRoots) {
+      for (const [id, prevClip] of Object.entries(this.state.clips)) {
+        if (newClips[id]) continue; // 新スキャン結果を優先
+        const firstPath = prevClip.files[0]?.path;
+        const underScannedRoot =
+          !!firstPath && scannedRoots.some((root) => relPartsUnder(firstPath, root) !== null);
+        if (!underScannedRoot) {
+          newClips[id] = prevClip;
+          preservedCount++;
+        }
+      }
+    }
+
     this.state.clips = newClips;
+    this.state.days = buildDays(Object.values(newClips));
     // notes / selections はそのまま保持(孤児も削除しない)
     this.scheduleSave();
+    return { preservedCount };
   }
 
   createNote(clipId: ID, timeSec: number, text: string, tags: string[]): Note {

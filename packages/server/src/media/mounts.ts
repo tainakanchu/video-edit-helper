@@ -47,6 +47,26 @@ export function resolveMediaPath(storedPath: string, mediaRoots: string[], mount
   return storedPath;
 }
 
+/**
+ * このマシンの実パスを、mounts(このマシンの対応表)を使って保存形パスへ逆変換する純関数。
+ * resolveMediaPath の逆方向(実パス→保存形)。スキャンが実パスで発見したファイルを、
+ * project.json に書き戻す保存形パスに戻すために使う。
+ * どの root の mount 先にも該当しなければ、localPath をそのまま返す。
+ */
+export function toStoredPath(localPath: string, mediaRoots: string[], mounts: MountMap): string {
+  for (const root of mediaRoots) {
+    const local = mounts[root];
+    if (!local) continue;
+    const parts = relPartsUnder(localPath, local);
+    if (!parts) continue;
+    if (parts.length === 0) return root;
+    const sep = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+    const trimmedRoot = root.replace(/[\\/]+$/, '');
+    return trimmedRoot + sep + parts.join(sep);
+  }
+  return localPath;
+}
+
 /** ローカルの mount 対応表を読み書きし、パス解決を提供する */
 export class MountStore {
   private mounts: MountMap = {};
@@ -79,6 +99,11 @@ export class MountStore {
   /** 保存済みパスをこのマシン用に解決 */
   resolve(storedPath: string, mediaRoots: string[]): string {
     return resolveMediaPath(storedPath, mediaRoots, this.mounts);
+  }
+
+  /** このマシンの実パスを保存形パスへ逆変換(resolve の逆方向) */
+  toStored(localPath: string, mediaRoots: string[]): string {
+    return toStoredPath(localPath, mediaRoots, this.mounts);
   }
 
   /** clip の各ファイルパスをこのマシン用に解決した clip コピーを返す */

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Clip, Day } from '@veh/shared';
+import type { Clip } from '@veh/shared';
 import { ProjectStore, ProjectUnreadableError, isDatalessPlaceholder } from './projectStore.js';
 
 let dir: string;
@@ -75,7 +75,30 @@ function mkClip(id: string, overrides: Partial<Clip> = {}): Clip {
   };
 }
 
-const day: Day = { id: '2025-01-01', date: '2025-01-01', index: 1, clipIds: ['c1'] };
+/** 指定パス・上書きでクリップを作る(cross-OS マウント対応表のテスト用) */
+function mkClipAt(id: string, filePath: string, overrides: Partial<Clip> = {}): Clip {
+  return mkClip(id, {
+    files: [
+      {
+        id: `f-${id}`,
+        path: filePath,
+        fileName: `${id}.MP4`,
+        sizeBytes: 100,
+        durationSec: 60,
+        width: 1920,
+        height: 1080,
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        fps: 30,
+        createdAt: null,
+        mtime: '2025-01-01T00:00:00.000Z',
+        startOffsetSec: 0,
+        playableInBrowser: true,
+      },
+    ],
+    ...overrides,
+  });
+}
 
 describe('ProjectStore 永続化', () => {
   it('新規ロード時はデフォルト設定', () => {
@@ -94,7 +117,7 @@ describe('ProjectStore 永続化', () => {
 
   it('保存後に再ロードして状態が復元される', async () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     store.createNote('c1', 5, 'メモ', ['tag']);
     await store.flush();
 
@@ -138,12 +161,12 @@ describe('世代バックアップ', () => {
 describe('再スキャンマージ', () => {
   it('同一 clipId の reviewStatus / watchedRanges を保持する', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     store.setReviewStatus('c1', 'reviewed');
     store.addWatchedRanges('c1', [{ start: 0, end: 30 }]);
 
     // 再スキャン: 同じ clipId だが reviewStatus は unreviewed の新規 Clip
-    store.replaceScanResult([day], [mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
+    store.replaceScanResult([mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
 
     const c = store.getClip('c1')!;
     expect(c.reviewStatus).toBe('reviewed');
@@ -152,30 +175,64 @@ describe('再スキャンマージ', () => {
 
   it('消えたクリップの notes は孤児として保持される', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     store.createNote('c1', 5, 'メモ', []);
 
     // 再スキャンで c1 が消える(c2 のみ)
-    store.replaceScanResult(
-      [{ id: '2025-01-01', date: '2025-01-01', index: 1, clipIds: ['c2'] }],
-      [mkClip('c2')],
-    );
+    store.replaceScanResult([mkClip('c2')]);
     expect(store.getClip('c1')).toBeUndefined();
     expect(Object.keys(store.getState().notes)).toHaveLength(1);
+  });
+
+  it('scannedRoots に含まれないルート配下の既存クリップは保持され、reviewStatus と days も維持される', () => {
+    const store = newStore();
+    // 初回スキャン: rootA(接続ドライブ) / rootB(未接続になる予定の HDD)の 2 クリップ
+    store.replaceScanResult([
+      mkClipAt('c1', '/media/rootA/c1.MP4', { dayId: '2025-01-01', recordedAt: '2025-01-01T10:00:00.000Z' }),
+      mkClipAt('c2', '/media/rootB/c2.MP4', { dayId: '2025-01-02', recordedAt: '2025-01-02T10:00:00.000Z' }),
+    ]);
+    store.setReviewStatus('c2', 'reviewed');
+    store.addWatchedRanges('c2', [{ start: 0, end: 20 }]);
+
+    // 再スキャン: rootA のみ接続 → 見つかるのは c1 のみ。scannedRoots で rootB が未接続と伝える
+    const { preservedCount } = store.replaceScanResult(
+      [mkClipAt('c1', '/media/rootA/c1.MP4', { dayId: '2025-01-01', reviewStatus: 'unreviewed', watchedRanges: [] })],
+      { scannedRoots: ['/media/rootA'] },
+    );
+
+    expect(preservedCount).toBe(1);
+    // rootB 配下の c2 は消えず、reviewStatus / watchedRanges もそのまま
+    const c2 = store.getClip('c2');
+    expect(c2).toBeDefined();
+    expect(c2!.reviewStatus).toBe('reviewed');
+    expect(c2!.watchedRanges).toEqual([{ start: 0, end: 20 }]);
+    // days が保持後の全クリップから再構築され、c2 の日も残っている
+    const days = store.getState().days;
+    expect(days.map((d) => d.date)).toEqual(['2025-01-01', '2025-01-02']);
+    expect(days.find((d) => d.date === '2025-01-02')!.clipIds).toEqual(['c2']);
+  });
+
+  it('scannedRoots 未指定なら従来通り全置換(保持しない)', () => {
+    const store = newStore();
+    store.replaceScanResult([mkClipAt('c1', '/media/rootA/c1.MP4')]);
+    const { preservedCount } = store.replaceScanResult([mkClipAt('c2', '/media/rootB/c2.MP4')]);
+    expect(preservedCount).toBe(0);
+    expect(store.getClip('c1')).toBeUndefined();
+    expect(store.getClip('c2')).toBeDefined();
   });
 });
 
 describe('addWatchedRanges 昇格', () => {
   it('unreviewed は in_progress に昇格', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     store.addWatchedRanges('c1', [{ start: 0, end: 10 }]);
     expect(store.getClip('c1')!.reviewStatus).toBe('in_progress');
   });
 
   it('reviewed は昇格させない', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     store.setReviewStatus('c1', 'reviewed');
     store.addWatchedRanges('c1', [{ start: 0, end: 10 }]);
     expect(store.getClip('c1')!.reviewStatus).toBe('reviewed');
@@ -207,7 +264,7 @@ describe('selections マイグレーション', () => {
 describe('Selection CRUD', () => {
   it('createSelection はデフォルト rating 0 / orderKey null', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     const sel = store.createSelection('c1', { inSec: 5, outSec: 10 });
     expect(sel.rating).toBe(0);
     expect(sel.orderKey).toBeNull();
@@ -219,7 +276,7 @@ describe('Selection CRUD', () => {
 
   it('noteId 付き createSelection は付箋を promoted に更新', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     const note = store.createNote('c1', 5, 'メモ', []);
     const sel = store.createSelection('c1', { inSec: 5, outSec: 10, noteId: note.id });
     expect(sel.noteId).toBe(note.id);
@@ -228,7 +285,7 @@ describe('Selection CRUD', () => {
 
   it('updateSelection は指定フィールドのみ更新', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     const sel = store.createSelection('c1', { inSec: 5, outSec: 10, rating: 1 });
     const updated = store.updateSelection(sel.id, { rating: 3, orderKey: 2.5 });
     expect(updated!.rating).toBe(3);
@@ -238,7 +295,7 @@ describe('Selection CRUD', () => {
 
   it('deleteSelection は promoted な付箋を open に戻す', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     const note = store.createNote('c1', 5, 'メモ', []);
     const sel = store.createSelection('c1', { inSec: 5, outSec: 10, noteId: note.id });
     expect(store.getState().notes[note.id]!.status).toBe('promoted');
@@ -249,7 +306,7 @@ describe('Selection CRUD', () => {
 
   it('deleteSelection: discarded な付箋は戻さない(promoted のみ open へ)', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     const note = store.createNote('c1', 5, 'メモ', []);
     const sel = store.createSelection('c1', { inSec: 5, outSec: 10, noteId: note.id });
     // 付箋を手動で discarded にしておく
@@ -260,9 +317,9 @@ describe('Selection CRUD', () => {
 
   it('再スキャンしても selections は保持される', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     const sel = store.createSelection('c1', { inSec: 5, outSec: 10 });
-    store.replaceScanResult([day], [mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
+    store.replaceScanResult([mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
     expect(store.getSelection(sel.id)).toBeDefined();
   });
 });
@@ -270,7 +327,7 @@ describe('Selection CRUD', () => {
 describe('proxyAvailable 永続化', () => {
   it('setProxyAvailable がファイルのフラグを立てる', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     const fileId = store.getClip('c1')!.files[0]!.id;
     expect(store.setProxyAvailable(fileId, true)).toBe(true);
     expect(store.getClip('c1')!.files[0]!.proxyAvailable).toBe(true);
@@ -278,17 +335,17 @@ describe('proxyAvailable 永続化', () => {
 
   it('未知 fileId は false', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     expect(store.setProxyAvailable('nope', true)).toBe(false);
   });
 
   it('再スキャンで同一 fileId の proxyAvailable は引き継がれる', () => {
     const store = newStore();
-    store.replaceScanResult([day], [mkClip('c1')]);
+    store.replaceScanResult([mkClip('c1')]);
     const fileId = store.getClip('c1')!.files[0]!.id;
     store.setProxyAvailable(fileId, true);
     // 再スキャン: 同じ fileId だが proxyAvailable 未設定の新規 Clip
-    store.replaceScanResult([day], [mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
+    store.replaceScanResult([mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
     expect(store.getClip('c1')!.files[0]!.proxyAvailable).toBe(true);
   });
 });

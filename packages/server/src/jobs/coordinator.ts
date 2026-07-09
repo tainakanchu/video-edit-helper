@@ -63,10 +63,20 @@ export class JobCoordinator {
           ctx.setProgress(total > 0 ? probed / total : 1);
           ctx.setMessage(`probed ${probed}/${total}`);
         },
+        this.mounts.getAll(),
       );
-      this.store.replaceScanResult(result.days, result.clips);
+      const { preservedCount } = this.store.replaceScanResult(result.clips, {
+        scannedRoots: result.scannedRoots,
+      });
       ctx.setProgress(1);
-      ctx.setMessage(`${result.probedCount} ファイル → ${result.clips.length} クリップ / ${result.days.length} 日`);
+      let message = `${result.probedCount} ファイル → ${result.clips.length} クリップ / ${result.days.length} 日`;
+      if (result.missingRoots.length > 0) {
+        message += ` ⚠ 見つからないルートをスキップ: ${result.missingRoots.join(' / ')}(既存クリップは保持)`;
+      }
+      if (preservedCount > 0) {
+        message += ` / 既存 ${preservedCount} クリップを保持`;
+      }
+      ctx.setMessage(message);
       // 全クリップに解析ジョブを自動投入(再スキャンマージ後の最新クリップを使う)
       this.autoEnqueueAnalysis(this.store.getAllClips());
     });

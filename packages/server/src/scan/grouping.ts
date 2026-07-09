@@ -283,7 +283,15 @@ export function buildDaysAndClips(
     }
   }
 
-  // Day 構築: dayId ごとにクリップを集約
+  return { days: buildDays(clips), clips };
+}
+
+/**
+ * クリップ配列から Day 一覧を構築する純関数。
+ * dayId ごとに集約し、日付昇順で index を振る。Day 内は recordedAt 昇順
+ * (同時刻はクリップ名で安定化)で並べる。
+ */
+export function buildDays(clips: Clip[]): Day[] {
   const dayMap = new Map<ID, Clip[]>();
   for (const c of clips) {
     const arr = dayMap.get(c.dayId) ?? [];
@@ -292,7 +300,7 @@ export function buildDaysAndClips(
   }
 
   const sortedDayIds = Array.from(dayMap.keys()).sort();
-  const days: Day[] = sortedDayIds.map((dayId, i) => {
+  return sortedDayIds.map((dayId, i) => {
     const dayClips = dayMap.get(dayId)!;
     dayClips.sort((a, b) => {
       const ta = Date.parse(a.recordedAt);
@@ -308,6 +316,4 @@ export function buildDaysAndClips(
       clipIds: dayClips.map((c) => c.id),
     };
   });
-
-  return { days, clips };
 }
