@@ -80,6 +80,12 @@
       const T = window.__TAURI__;
       const $ = (id) => document.getElementById(id);
 
+      function showError(msg) {
+        const el = $("err");
+        el.style.display = "block";
+        el.textContent = msg || "エラーが発生しました";
+      }
+
       function setPhase(phase, status, message, progress) {
         const el = document.querySelector(`.phase[data-phase="${phase}"]`);
         if (el) {
@@ -108,8 +114,15 @@
           try {
             const e = typeof ev.payload === "string" ? JSON.parse(ev.payload) : ev.payload;
             if (e.phase === "ready") {
-              if (e.status === "error") setPhase("model", "error", e.message);
+              // サーバー異常終了などの一般エラー。依存行に紛れ込ませず明示表示する。
+              if (e.status === "error") showError(e.message);
               else $("sub").textContent = "起動しています…";
+            } else if (e.phase === "data") {
+              // 保存先(データ)関連。ffmpeg 等の依存行とは無関係なので独立して表示。
+              if (e.status === "error") {
+                $("sub").textContent = "保存先の確認が必要です";
+                showError(e.message);
+              }
             } else {
               setPhase(e.phase, e.status, e.message, e.progress);
             }

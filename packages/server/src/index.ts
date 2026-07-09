@@ -4,7 +4,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import { loadConfig } from './config.js';
-import { ProjectStore } from './store/projectStore.js';
+import { ProjectStore, ProjectUnreadableError } from './store/projectStore.js';
 import { JobQueue } from './jobs/queue.js';
 import { JobCoordinator } from './jobs/coordinator.js';
 import { TranscriptCache } from './search/transcriptCache.js';
@@ -26,18 +26,47 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const store = ProjectStore.load({
-    projectFile: config.projectFile,
-    backupsDir: config.backupsDir,
-    // v1→v2 移行時にサムネ/VAD/文字起こし/シーン/プロキシのキャッシュも rename する
-    cacheDirs: {
-      thumbsDir: config.thumbsDir,
-      vadDir: config.vadDir,
-      transcriptsDir: config.transcriptsDir,
-      scenesDir: config.scenesDir,
-      proxiesDir: config.proxiesDir,
-    },
-  });
+  let store: ProjectStore;
+  try {
+    store = ProjectStore.load({
+      projectFile: config.projectFile,
+      backupsDir: config.backupsDir,
+      // v1→v2 移行時にサムネ/VAD/文字起こし/シーン/プロキシのキャッシュも rename する
+      cacheDirs: {
+        thumbsDir: config.thumbsDir,
+        vadDir: config.vadDir,
+        transcriptsDir: config.transcriptsDir,
+        scenesDir: config.scenesDir,
+        proxiesDir: config.proxiesDir,
+      },
+    });
+  } catch (e) {
+    if (e instanceof ProjectUnreadableError) {
+      // 保存先が読めない(OneDrive 等でローカル未取得/破損)。
+      // ここで空データを保存すると本物を壊すので、書き込みは一切せず、
+      // プロセスも殺さない。スプラッシュに保存先エラーを出し、ユーザーが
+      // 「フォルダを変更/既定に戻す」で保存先を直して再起動できるよう待機する。
+      emit({
+        phase: 'data',
+        status: 'error',
+        message:
+          'データ保存先の project.json を読み込めませんでした。' +
+          'OneDrive 等のクラウド上のみでローカルに未取得の可能性があります。' +
+          'OneDrive を起動して同期を完了するか、下の「フォルダを変更／既定に戻す」で保存先を変えてください。' +
+          '(データは失われていません)',
+      });
+      console.error('[data] プロジェクト読み込み失敗(スプラッシュで保存先変更待ち):', e);
+      // プロセスを生かし続ける。ここで終了すると Rust 側が「サーバープロセスが
+      // 終了しました」を出して上の 'data' エラー表示を上書きしてしまう。
+      // 未解決 Promise だけではイベントループが空になり Node が終了するため、
+      // キープアライブのタイマーを置く(保存先変更→再起動で解放される)。
+      setInterval(() => {}, 1 << 30);
+      await new Promise<never>(() => {
+        /* 保存先変更→再起動で復帰。ここでプロセスを維持しアプリを落とさない */
+      });
+    }
+    throw e;
+  }
   const queue = new JobQueue();
   const mounts = new MountStore(config.mountsFile);
   const coordinator = new JobCoordinator(config, store, queue, mounts);

@@ -34,8 +34,20 @@ export async function ensureDependencies(
     await ensureFfBinary({ name: 'ffprobe', destPath: config.ffprobePath, url, emit });
   }
 
-  // whisper モデル(未存在時のみ取得)
-  await ensureWhisperModel({ destPath: config.whisperModelPath, emit });
+  // whisper モデル(未存在時のみ取得)。
+  // 文字起こしは任意機能なので、取得に失敗してもアプリ起動はブロックしない
+  // (他機能=閲覧/スキャン/シーン/サムネ等は whisper 無しで使える)。
+  try {
+    await ensureWhisperModel({ destPath: config.whisperModelPath, emit });
+  } catch (e) {
+    console.error('[provision] whisper モデルの準備に失敗(起動は継続):', e);
+    emit({
+      phase: 'model',
+      status: 'skip',
+      progress: 1,
+      message: 'whisper モデル未取得(文字起こしは後で再取得。他機能は利用可)',
+    });
+  }
 
   emit({ phase: 'ready', status: 'done', progress: 1, message: '準備完了' });
 }

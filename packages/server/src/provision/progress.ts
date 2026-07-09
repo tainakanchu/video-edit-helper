@@ -1,7 +1,7 @@
 // 初回セットアップ(依存取得)の進捗を 1 行 NDJSON で stdout に出力する。
 // Tauri(Rust)側がこの `VEH_SETUP <json>` 行をパースして splash 画面に転送する。
 
-export type SetupPhase = 'ffmpeg' | 'ffprobe' | 'model' | 'ready';
+export type SetupPhase = 'ffmpeg' | 'ffprobe' | 'model' | 'data' | 'ready';
 export type SetupStatus = 'downloading' | 'extracting' | 'done' | 'skip' | 'error';
 
 export interface SetupEvent {

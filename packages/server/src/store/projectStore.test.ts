@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Clip, Day } from '@veh/shared';
-import { ProjectStore } from './projectStore.js';
+import { ProjectStore, ProjectUnreadableError, isDatalessPlaceholder } from './projectStore.js';
 
 let dir: string;
 let projectFile: string;
@@ -290,5 +290,41 @@ describe('proxyAvailable 永続化', () => {
     // 再スキャン: 同じ fileId だが proxyAvailable 未設定の新規 Clip
     store.replaceScanResult([day], [mkClip('c1', { reviewStatus: 'unreviewed', watchedRanges: [] })]);
     expect(store.getClip('c1')!.files[0]!.proxyAvailable).toBe(true);
+  });
+});
+
+describe('読めない保存先(OneDrive 等のデータレス/破損)でも本物を壊さない', () => {
+  it('isDatalessPlaceholder: サイズ>0 かつブロック=0(スパース) を検知する', () => {
+    // ftruncate で「論理サイズは大きいが実体ブロック=0」のスパースファイルを作る
+    // (= OneDrive のオンラインのみプレースホルダと同じ stat になる)
+    const fd = fs.openSync(projectFile, 'w');
+    fs.ftruncateSync(fd, 260470);
+    fs.closeSync(fd);
+    expect(isDatalessPlaceholder(projectFile)).toBe(true);
+  });
+
+  it('isDatalessPlaceholder: 実体のある通常ファイルは false / 無いファイルも false', () => {
+    fs.writeFileSync(projectFile, JSON.stringify({ version: 2, days: [] }));
+    expect(isDatalessPlaceholder(projectFile)).toBe(false);
+    expect(isDatalessPlaceholder(path.join(dir, 'nope.json'))).toBe(false);
+  });
+
+  it('データレスな project.json は ProjectUnreadableError を投げる(空で上書きしない)', () => {
+    const fd = fs.openSync(projectFile, 'w');
+    fs.ftruncateSync(fd, 260470);
+    fs.closeSync(fd);
+    const before = fs.statSync(projectFile);
+    expect(() => ProjectStore.load({ projectFile, backupsDir, saveDebounceMs: 0 })).toThrow(
+      ProjectUnreadableError,
+    );
+    // 本物(サイズ)を空データで書き潰していないこと
+    expect(fs.statSync(projectFile).size).toBe(before.size);
+  });
+
+  it('壊れた JSON も ProjectUnreadableError を投げる', () => {
+    fs.writeFileSync(projectFile, '{ this is not json ');
+    expect(() => ProjectStore.load({ projectFile, backupsDir, saveDebounceMs: 0 })).toThrow(
+      ProjectUnreadableError,
+    );
   });
 });

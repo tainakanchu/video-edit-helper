@@ -58,12 +58,29 @@ export class ProjectStore {
     this.debounceMs = opts.saveDebounceMs ?? SAVE_DEBOUNCE_MS;
   }
 
-  /** project.json をロード。無ければ defaultSettings で新規作成 */
+  /**
+   * project.json をロード。無ければ defaultSettings で新規作成。
+   * 保存ファイルが存在するのに読めない(OneDrive 等でローカル未取得=データレス、
+   * または破損)場合は {@link ProjectUnreadableError} を投げる。
+   * 空データで上書きしてクラウドの本物を壊さないよう、呼び出し側は起動を止めず
+   * 「保存先を直す」導線に倒すこと。
+   */
   static load(opts: ProjectStoreOptions): ProjectStore {
     let state: ProjectState;
     if (fs.existsSync(opts.projectFile)) {
-      const raw = fs.readFileSync(opts.projectFile, 'utf8');
-      state = JSON.parse(raw) as ProjectState;
+      // クラウド同期フォルダ(OneDrive/iCloud 等)では、ファイルがメタデータだけ存在し
+      // 実体がローカルに無い「オンラインのみ」状態になり得る。その状態で読むと
+      // ハング/タイムアウトするので、読む前に検知して明示的なエラーにする。
+      if (isDatalessPlaceholder(opts.projectFile)) {
+        throw new ProjectUnreadableError(opts.projectFile);
+      }
+      let raw: string;
+      try {
+        raw = fs.readFileSync(opts.projectFile, 'utf8');
+        state = JSON.parse(raw) as ProjectState;
+      } catch (e) {
+        throw new ProjectUnreadableError(opts.projectFile, e);
+      }
       // Phase 2 マイグレーション: 旧データに selections が無ければ {} で初期化
       if (!state.selections) state.selections = {};
       // Phase 4 マイグレーション: 旧データに無い設定キー(proxyAllFiles 等)を
@@ -439,6 +456,36 @@ export class ProjectStore {
     for (const old of entries.slice(BACKUP_KEEP)) {
       await fsp.rm(path.join(this.backupsDir, old), { force: true });
     }
+  }
+}
+
+/**
+ * OneDrive/iCloud 等の「オンラインのみ(未ダウンロード)」プレースホルダかどうか。
+ * 論理サイズ>0 なのに割り当てブロック=0 のとき、実体がローカルに無い(=読むと失敗する)。
+ */
+export function isDatalessPlaceholder(file: string): boolean {
+  try {
+    const st = fs.statSync(file);
+    return st.size > 0 && st.blocks === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * project.json が存在するのに読めない状態(クラウド未取得のデータレス、または破損)。
+ * これを起動時に握りつぶして空データで保存すると本物を壊すため、専用の型で区別する。
+ */
+export class ProjectUnreadableError extends Error {
+  readonly path: string;
+  constructor(path: string, cause?: unknown) {
+    super(
+      `プロジェクトの保存ファイルを読み込めませんでした: ${path} ` +
+        `(OneDrive 等のクラウド上のみでローカルに未取得か、ファイル破損の可能性)`,
+    );
+    this.name = 'ProjectUnreadableError';
+    this.path = path;
+    if (cause !== undefined) (this as { cause?: unknown }).cause = cause;
   }
 }
 
