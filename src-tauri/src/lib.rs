@@ -260,23 +260,52 @@ fn start_server(app: &tauri::AppHandle) {
     });
 }
 
-/// 起動時に GitHub リリースの latest.json を確認し、新版があればネイティブダイアログで確認して
+/// GitHub リリースの latest.json を確認し、新版があればネイティブダイアログで確認して
 /// ダウンロード・適用・再起動する。本体 UI は http://localhost 配信で Tauri IPC が使えないため、
 /// アップデート導線は Rust 側に置く(crateforge と同様のユーザー操作最小の更新)。
-async fn check_for_update(app: tauri::AppHandle) {
+///
+/// `interactive` はメニュー等ユーザー操作から明示的に呼ばれたかどうか。
+/// true の場合は「初期化失敗」「最新でした」「確認失敗」もダイアログで知らせる
+/// (起動時の自動チェックでは従来通り無言で eprintln のみ)。
+///
+/// 戻り値は「更新チェックの通信自体が成功したか」(true=Ok、false=Err)。
+/// 起動時チェックのリトライ可否判定に使う。
+async fn run_update_check(app: tauri::AppHandle, interactive: bool) -> bool {
     let updater = match app.updater() {
         Ok(u) => u,
         Err(e) => {
             eprintln!("[veh] updater 初期化失敗: {e}");
-            return;
+            if interactive {
+                app.dialog()
+                    .message(format!("更新の確認に失敗しました: {e}"))
+                    .title("アップデート")
+                    .blocking_show();
+            }
+            return false;
         }
     };
     let update = match updater.check().await {
         Ok(Some(u)) => u,
-        Ok(None) => return, // 既に最新
+        Ok(None) => {
+            // 既に最新
+            if interactive {
+                let current = app.package_info().version.to_string();
+                app.dialog()
+                    .message(format!("お使いのバージョン v{current} は最新です。"))
+                    .title("アップデート")
+                    .blocking_show();
+            }
+            return true;
+        }
         Err(e) => {
             eprintln!("[veh] 更新確認失敗: {e}");
-            return;
+            if interactive {
+                app.dialog()
+                    .message(format!("更新の確認に失敗しました: {e}"))
+                    .title("アップデート")
+                    .blocking_show();
+            }
+            return false;
         }
     };
     let version = update.version.clone();
@@ -290,7 +319,7 @@ async fn check_for_update(app: tauri::AppHandle) {
         ))
         .blocking_show();
     if !confirmed {
-        return;
+        return true;
     }
     eprintln!("[veh] 更新をダウンロード中: {version}");
     match update.download_and_install(|_downloaded, _total| {}, || {}).await {
@@ -308,6 +337,23 @@ async fn check_for_update(app: tauri::AppHandle) {
                 .title("アップデート")
                 .blocking_show();
         }
+    }
+    true
+}
+
+/// 起動時の自動チェック用ラッパ。ネットワーク一時不安定などで初回のチェック通信自体が
+/// 失敗(Err)した場合に備え、5 秒待って 1 回だけリトライする(堅牢性向上)。
+/// ユーザー操作を伴わないため常に非 interactive(無言)で呼ぶ。
+async fn startup_update_check(app: tauri::AppHandle) {
+    if !run_update_check(app.clone(), false).await {
+        // tokio は直接の依存クレートではなく Cargo.toml に追加できないため tokio::time::sleep は
+        // 使えない(E0433)。代わりに別スレッドで std::thread::sleep して待ち、そこから
+        // tauri::async_runtime::spawn でリトライ分の非同期タスクを起動する
+        // (setup() 内から同関数を spawn するのと同じやり方で、同期コンテキストからでも呼べる)。
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            tauri::async_runtime::spawn(run_update_check(app, false));
+        });
     }
 }
 
@@ -355,6 +401,14 @@ pub fn run() {
                         true,
                         None::<&str>,
                     )?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &MenuItem::with_id(
+                        handle,
+                        "check_update",
+                        "アップデートを確認…",
+                        true,
+                        None::<&str>,
+                    )?,
                 ],
             )?;
             let menu = Menu::default(handle)?;
@@ -362,16 +416,24 @@ pub fn run() {
             Ok(menu)
         })
         .on_menu_event(|app, event| {
-            // フォルダ選択はブロッキングなので別スレッドで(コマンドハンドラと同じ扱い)
             let handle = app.clone();
             let id = event.id().as_ref().to_string();
-            std::thread::spawn(move || match id.as_str() {
-                "change_data_dir" => choose_data_dir(handle),
-                "reset_data_dir" => use_default_data_dir(handle),
-                "change_cache_dir" => choose_cache_dir(handle),
-                "reset_cache_dir" => use_default_cache_dir(handle),
-                _ => {}
-            });
+            match id.as_str() {
+                // アップデート確認は async 関数なので async_runtime 上で spawn する
+                "check_update" => {
+                    tauri::async_runtime::spawn(run_update_check(handle, true));
+                }
+                // フォルダ選択はブロッキングなので別スレッドで(コマンドハンドラと同じ扱い)
+                _ => {
+                    std::thread::spawn(move || match id.as_str() {
+                        "change_data_dir" => choose_data_dir(handle),
+                        "reset_data_dir" => use_default_data_dir(handle),
+                        "change_cache_dir" => choose_cache_dir(handle),
+                        "reset_cache_dir" => use_default_cache_dir(handle),
+                        _ => {}
+                    });
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_setup_info,
@@ -391,7 +453,7 @@ pub fn run() {
             start_server(&app.handle());
             // 本番のみ: 起動時にアップデートを確認する(dev はスキップ)
             if !tauri::is_dev() {
-                tauri::async_runtime::spawn(check_for_update(app.handle().clone()));
+                tauri::async_runtime::spawn(startup_update_check(app.handle().clone()));
             }
             Ok(())
         })
