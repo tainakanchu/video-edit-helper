@@ -33,6 +33,12 @@ export function SetupView() {
     for (const [k, v] of Object.entries(initSettings.cameraTimeOffsets ?? {})) out[k] = String(v)
     return out
   })
+  // 素材ルート(mediaRoots の要素)ごとの時刻補正(分)。入力の途中(空/"-")を許すため文字列で保持
+  const [rootOffsets, setRootOffsets] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(initSettings.rootTimeOffsets ?? {})) out[k] = String(v)
+    return out
+  })
 
   // スキャン済みで検出された機器 + 既に補正設定済みのラベルを一覧化
   const cameras = useMemo(() => {
@@ -42,10 +48,20 @@ export function SetupView() {
     return Array.from(set).sort()
   }, [project, cameraOffsets])
 
+  // 入力済み(非空)のルートのみを補正対象として一覧化
+  const nonEmptyRoots = useMemo(() => roots.filter(r => r.trim() !== ''), [roots])
+
   function bumpOffset(cam: string, deltaMin: number) {
     setCameraOffsets(prev => {
       const cur = Math.trunc(Number(prev[cam] ?? '0')) || 0
       return { ...prev, [cam]: String(cur + deltaMin) }
+    })
+  }
+
+  function bumpRootOffset(root: string, deltaMin: number) {
+    setRootOffsets(prev => {
+      const cur = Math.trunc(Number(prev[root] ?? '0')) || 0
+      return { ...prev, [root]: String(cur + deltaMin) }
     })
   }
 
@@ -64,6 +80,11 @@ export function SetupView() {
       const n = Math.trunc(Number(raw))
       if (Number.isFinite(n) && n !== 0) cameraTimeOffsets[label] = n
     }
+    const rootTimeOffsets: Record<string, number> = {}
+    for (const [root, raw] of Object.entries(rootOffsets)) {
+      const n = Math.trunc(Number(raw))
+      if (Number.isFinite(n) && n !== 0) rootTimeOffsets[root] = n
+    }
     return {
       mediaRoots: roots.filter(Boolean),
       dayStartHour: isNaN(dsh) ? defaultSettings.dayStartHour : dsh,
@@ -71,6 +92,7 @@ export function SetupView() {
       thumbFineIntervalSec: isNaN(tfi) ? defaultSettings.thumbFineIntervalSec : tfi,
       proxyAllFiles,
       cameraTimeOffsets,
+      rootTimeOffsets,
     }
   }
 
@@ -179,6 +201,36 @@ export function SetupView() {
           再生可能な素材も含め全ファイルのプロキシを生成(4K 素材が重い場合に)
         </label>
       </div>
+
+      {nonEmptyRoots.length > 0 && (
+        <div className="field-group root-offsets">
+          <div className="field-label">素材ルートごとの時刻補正</div>
+          <p className="hint">
+            ルート配下の全素材に適用します。機器ごとの補正が指定されている素材はそちらが優先されます。変更は次のスキャンで反映。
+          </p>
+          {nonEmptyRoots.map(root => (
+            <div key={root} className="offset-row">
+              <span className="offset-cam" title={root}>{root}</span>
+              <div className="offset-input">
+                <button className="ghost" onClick={() => bumpRootOffset(root, -60)} disabled={scanning}>
+                  −1h
+                </button>
+                <input
+                  type="number"
+                  value={rootOffsets[root] ?? ''}
+                  placeholder="0"
+                  onChange={e => setRootOffsets(prev => ({ ...prev, [root]: e.target.value }))}
+                  disabled={scanning}
+                />
+                <button className="ghost" onClick={() => bumpRootOffset(root, 60)} disabled={scanning}>
+                  +1h
+                </button>
+                <span className="offset-unit">分</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {cameras.length > 0 && (
         <div className="field-group camera-offsets">

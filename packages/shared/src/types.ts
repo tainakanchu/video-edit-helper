@@ -98,6 +98,10 @@ export interface ProjectSettings {
    * 未設定(0)の機器は補正なし。スキャン時に適用されるため、変更後は再スキャンが必要。
    */
   cameraTimeOffsets?: Record<string, number>;
+  /** 素材ルート(mediaRoots の要素)ごとの撮影時刻補正(分, 符号付き)。
+      ルート配下の全素材に適用。cameraTimeOffsets(機器ごと)が同じ素材に指定されていれば
+      そちらが優先(上書き。加算ではない)。変更後は再スキャンが必要。 */
+  rootTimeOffsets?: Record<string, number>;
 }
 
 /** 選定範囲(Phase 2)。付箋からの昇格またはイン/アウト点打ちで作成 */

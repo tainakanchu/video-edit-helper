@@ -27,6 +27,7 @@ export const defaultSettings: ProjectSettings = {
   thumbFineIntervalSec: 10,
   proxyAllFiles: false,
   cameraTimeOffsets: {},
+  rootTimeOffsets: {},
 };
 
 /**

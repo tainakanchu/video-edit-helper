@@ -28,6 +28,7 @@ function file(p: Partial<ProbedFile> & { path: string; fileName: string }): Prob
   return {
     dir: '/media/cam',
     mediaRoot: '/media',
+    storedRoot: '/media',
     sizeBytes: 100 * 1024 * 1024,
     durationSec: 60,
     createdAt: null,
@@ -430,5 +431,72 @@ describe('カメラ別 時刻補正 (cameraTimeOffsets)', () => {
     const { clips } = buildDaysAndClips(files, settings);
     const vlog = clips.find((c) => c.cameraLabel === 'vlog')!;
     expect(vlog.recordedAt).toBe('2025-05-01T20:00:00.000Z');
+  });
+});
+
+describe('素材ルート別 時刻補正 (rootTimeOffsets)', () => {
+  // 同一ルート(/media/hdd)配下に複数サブフォルダ(カメラ)がぶら下がる HDD 構成を模す
+  const filesUnderRoot = [
+    file({
+      path: '/media/hdd/2025-05-01/A.MP4',
+      fileName: 'A.MP4',
+      dir: '/media/hdd/2025-05-01',
+      mediaRoot: '/media/hdd',
+      storedRoot: '/media/hdd',
+      createdAt: '2025-05-01T20:00:00.000Z',
+    }),
+    file({
+      path: '/media/hdd/2025-05-02/B.MP4',
+      fileName: 'B.MP4',
+      dir: '/media/hdd/2025-05-02',
+      mediaRoot: '/media/hdd',
+      storedRoot: '/media/hdd',
+      createdAt: '2025-05-02T09:00:00.000Z',
+    }),
+  ];
+  // 別ルート配下のファイル(補正が効かないことの対照用)
+  const fileUnderOtherRoot = file({
+    path: '/media/ssd/2025-05-01/C.MP4',
+    fileName: 'C.MP4',
+    dir: '/media/ssd/2025-05-01',
+    mediaRoot: '/media/ssd',
+    storedRoot: '/media/ssd',
+    createdAt: '2025-05-01T20:00:00.000Z',
+  });
+
+  it('ルート配下の全カメラ(複数サブフォルダ)の recordedAt に効く(他ルートは不変)', () => {
+    const withOffset: ProjectSettings = {
+      ...settings,
+      rootTimeOffsets: { '/media/hdd': 60 },
+    };
+    const { clips } = buildDaysAndClips([...filesUnderRoot, fileUnderOtherRoot], withOffset);
+    const a = clips.find((c) => c.name === 'A.MP4')!;
+    const b = clips.find((c) => c.name === 'B.MP4')!;
+    const c = clips.find((c) => c.name === 'C.MP4')!;
+    expect(a.recordedAt).toBe('2025-05-01T21:00:00.000Z'); // +60分
+    expect(b.recordedAt).toBe('2025-05-02T10:00:00.000Z'); // +60分
+    expect(c.recordedAt).toBe('2025-05-01T20:00:00.000Z'); // 別ルートは補正なし
+  });
+
+  it('同じ素材に cameraTimeOffsets があればそちらが優先(加算されない)', () => {
+    // A.MP4 の cameraLabel は '2025-05-01'(mediaRoot 直下のサブフォルダ名)
+    const withBoth: ProjectSettings = {
+      ...settings,
+      cameraTimeOffsets: { '2025-05-01': 30 },
+      rootTimeOffsets: { '/media/hdd': 60 },
+    };
+    const { clips } = buildDaysAndClips(filesUnderRoot, withBoth);
+    const a = clips.find((c) => c.name === 'A.MP4')!;
+    const b = clips.find((c) => c.name === 'B.MP4')!;
+    // A は cameraTimeOffsets(+30分)が優先。rootTimeOffsets(+60分)とは加算されない
+    expect(a.recordedAt).toBe('2025-05-01T20:30:00.000Z');
+    // B は cameraLabel が対象外のため rootTimeOffsets(+60分)が適用される
+    expect(b.recordedAt).toBe('2025-05-02T10:00:00.000Z');
+  });
+
+  it('どちらも未設定なら recordedAt は不変', () => {
+    const { clips } = buildDaysAndClips(filesUnderRoot, settings);
+    const a = clips.find((c) => c.name === 'A.MP4')!;
+    expect(a.recordedAt).toBe('2025-05-01T20:00:00.000Z');
   });
 });

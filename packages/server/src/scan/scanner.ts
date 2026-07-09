@@ -17,6 +17,12 @@ interface FoundFile {
   mediaRoot: string;
 }
 
+/** FoundFile に保存形ルートを付与したもの(走査ループで resolvedRoots ↔ scannedRoots の対応から付与) */
+interface FoundFileWithStoredRoot extends FoundFile {
+  /** このファイルが属する保存形ルート(project.json の mediaRoots の要素そのもの) */
+  storedRoot: string;
+}
+
 /**
  * 走査対象外のディレクトリ判定。
  * 隠しディレクトリ(.始まり)に加え、OS のゴミ箱/システムフォルダ(削除済み素材が混じる)を除外する。
@@ -132,10 +138,15 @@ export async function scanMediaRoots(
     console.warn(`[scan] 見つからないメディアルートをスキップ: ${missingRoots.join(' / ')}`);
   }
 
-  // 全 mediaRoot を走査
-  const found: FoundFile[] = [];
-  for (const root of resolvedRoots) {
-    found.push(...(await walkMediaRoot(root)));
+  // 全 mediaRoot を走査。resolvedRoots(実パス)と scannedRoots(保存形)は
+  // resolveScanRoots 内で同じ push で並行に構築されており添字が対応するので、
+  // その対応で各ファイルに保存形ルート(storedRoot)を付与する。
+  const found: FoundFileWithStoredRoot[] = [];
+  for (let i = 0; i < resolvedRoots.length; i++) {
+    const root = resolvedRoots[i]!;
+    const storedRoot = scannedRoots[i]!;
+    const filesInRoot = await walkMediaRoot(root);
+    found.push(...filesInRoot.map((f) => ({ ...f, storedRoot })));
   }
   // 重複パス除去(複数 root が重なる場合)
   const seen = new Set<string>();
@@ -167,6 +178,7 @@ export async function scanMediaRoots(
           fileName: f.fileName,
           dir: f.dir,
           mediaRoot: f.mediaRoot,
+          storedRoot: f.storedRoot,
           sizeBytes: stat.size,
           durationSec: meta.durationSec,
           createdAt: meta.createdAt,

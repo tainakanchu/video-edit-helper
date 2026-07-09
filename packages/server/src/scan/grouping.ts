@@ -11,6 +11,9 @@ export interface ProbedFile {
   dir: string;
   /** このファイルが属する mediaRoot(絶対パス) */
   mediaRoot: string;
+  /** このファイルが属する保存形ルート(project.json の mediaRoots の要素そのもの)。
+      走査時の実パス mediaRoot とは別(cross-OS のマウント対応で異なりうる) */
+  storedRoot: string;
   sizeBytes: number;
   durationSec: number;
   /** コンテナの creation_time(ISO)。無ければ null */
@@ -261,8 +264,11 @@ export function buildDaysAndClips(
       const durationSec = offset;
       const cameraLabel = cameraLabelOf(first);
       // カメラ本体時計のズレ(例: 台湾時間のまま等)を機器ごとに補正する。
+      // 機器ごとの補正(cameraTimeOffsets)が未設定なら、素材ルート単位の補正
+      // (rootTimeOffsets)にフォールバックする(優先順位: 機器 > ルート。加算ではなく上書き)。
       // 補正後の時刻を recordedAt として保存し、Day 振り分け・並び順・表示すべてに効かせる。
-      const offsetMin = settings.cameraTimeOffsets?.[cameraLabel] ?? 0;
+      const offsetMin =
+        settings.cameraTimeOffsets?.[cameraLabel] ?? settings.rootTimeOffsets?.[first.storedRoot] ?? 0;
       const rawRecordedAt = recordedAtOf(first);
       const recordedAt = offsetMin
         ? new Date(Date.parse(rawRecordedAt) + offsetMin * 60_000).toISOString()

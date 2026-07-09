@@ -45,6 +45,8 @@ const settingsSchema = z.object({
       proxyAllFiles: z.boolean().optional(),
       // cameraLabel → 補正分(符号付き整数)。±24h を上限にガード
       cameraTimeOffsets: z.record(z.string(), z.number().int().min(-1440).max(1440)).optional(),
+      // 素材ルート(mediaRoots の要素)→ 補正分(符号付き整数)。±24h を上限にガード
+      rootTimeOffsets: z.record(z.string(), z.number().int().min(-1440).max(1440)).optional(),
     })
     .strict(),
 });

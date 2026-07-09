@@ -380,29 +380,34 @@ a {
   font-weight: 600;
   margin-bottom: 4px;
 }
-.camera-offsets .offset-row {
+.camera-offsets .offset-row,
+.root-offsets .offset-row {
   display: flex;
   align-items: center;
   gap: 12px;
   margin: 6px 0;
 }
-.camera-offsets .offset-cam {
+.camera-offsets .offset-cam,
+.root-offsets .offset-cam {
   width: 200px;
   color: var(--text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.camera-offsets .offset-input {
+.camera-offsets .offset-input,
+.root-offsets .offset-input {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.camera-offsets .offset-input input {
+.camera-offsets .offset-input input,
+.root-offsets .offset-input input {
   width: 80px;
   text-align: right;
 }
-.camera-offsets .offset-unit {
+.camera-offsets .offset-unit,
+.root-offsets .offset-unit {
   color: var(--text-dim);
 }
 

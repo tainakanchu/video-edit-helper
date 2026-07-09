@@ -94,3 +94,43 @@ describe('resolveScanRoots(mounts 対応表によるルート解決)', () => {
     expect(result.missingRoots).toEqual([ng]);
   });
 });
+
+describe('storedRoot の伝播(実パス root ↔ 保存形 root の添字対応)', () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  it('resolveScanRoots の resolvedRoots/scannedRoots は添字が対応し、各 root の走査結果へ保存形を付与できる', async () => {
+    const rootA = fs.mkdtempSync(path.join(os.tmpdir(), 'veh-scan-rootA-'));
+    const rootB = fs.mkdtempSync(path.join(os.tmpdir(), 'veh-scan-rootB-'));
+    dirs.push(rootA, rootB);
+    fs.writeFileSync(path.join(rootA, 'a.mp4'), '');
+    fs.mkdirSync(path.join(rootB, 'sub'));
+    fs.writeFileSync(path.join(rootB, 'sub', 'b.mov'), '');
+
+    // 保存形ルート(project.json 上の表記)は実パスと異なりうる想定で、
+    // mounts 対応表を介して rootA/rootB(実パス)へ解決させる
+    const storedA = 'D:\\footage\\camA';
+    const storedB = 'D:\\footage\\camB';
+    const { resolvedRoots, scannedRoots } = resolveScanRoots(
+      [storedA, storedB],
+      { [storedA]: rootA, [storedB]: rootB },
+      { platform: 'darwin', exists: (p) => p === rootA || p === rootB },
+    );
+    expect(resolvedRoots).toEqual([rootA, rootB]);
+    expect(scannedRoots).toEqual([storedA, storedB]);
+
+    // scanMediaRoots 内の走査ループと同じく、resolvedRoots/scannedRoots の添字対応で
+    // storedRoot(保存形ルート)を各ファイルへ付与する(walkMediaRoot の戻り値への map)
+    const found: Array<{ fileName: string; storedRoot: string }> = [];
+    for (let i = 0; i < resolvedRoots.length; i++) {
+      const storedRoot = scannedRoots[i]!;
+      const filesInRoot = await walkMediaRoot(resolvedRoots[i]!);
+      found.push(...filesInRoot.map((f) => ({ fileName: f.fileName, storedRoot })));
+    }
+
+    expect(found.find((f) => f.fileName === 'a.mp4')?.storedRoot).toBe(storedA);
+    expect(found.find((f) => f.fileName === 'b.mov')?.storedRoot).toBe(storedB);
+  });
+});
