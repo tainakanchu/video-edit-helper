@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, thumbUrl } from '../api/client';
 import { usePlayer } from './PlayerContext';
 import { useAppStore, notesForClip, projectSelections } from '../store/useAppStore';
 import {
+  buildSlotMap,
+  computeSlotCount,
   computeVisibleRange,
   indexToOffset,
-  timeToIndex,
+  minIntervalCoverage,
   scrollToCenter,
+  selectInterval,
+  timeToSlot,
 } from '../lib/thumbStrip';
 import { selectionsForClip } from '../lib/selection';
-import type { ThumbManifest } from '@veh/shared';
 
 interface ThumbnailStripProps {
   /** ペンディング中のイン点(秒)。ストリップにマーカー表示 */
@@ -17,6 +20,9 @@ interface ThumbnailStripProps {
   /** シーン転換点(秒)。ストリップに細い縦線で表示 */
   sceneTimes?: number[] | null;
 }
+
+/** サムネ生成が未完のときの再取得間隔(ms) */
+const POLL_INTERVAL_MS = 5000;
 
 export function ThumbnailStrip({ pendingInSec, sceneTimes }: ThumbnailStripProps) {
   const p = usePlayer();
@@ -33,38 +39,41 @@ export function ThumbnailStrip({ pendingInSec, sceneTimes }: ThumbnailStripProps
   const lastUserScrollRef = useRef<number>(0);
   const isProgrammaticScrollRef = useRef<boolean>(false);
 
-  // サムネ取得
+  // サムネ取得。裏で生成が進んでいる間(最密 interval が未完)は 5 秒間隔で再取得する
   useEffect(() => {
     setIntervalSec(null);
     setTimes([]);
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    api.getThumbs(p.clip.id).then(res => {
-      if (cancelled) return;
-      const manifest: ThumbManifest = res.manifest;
-      const keys = Object.keys(manifest.intervals)
-        .map(Number)
-        .filter(n => !isNaN(n))
-        .sort((a, b) => a - b);
-
-      for (const key of keys) {
-        const arr = manifest.intervals[String(key)];
-        if (arr && arr.length > 0) {
-          setIntervalSec(key);
-          setTimes(arr);
-          return;
+    const fetchOnce = () => {
+      api.getThumbs(p.clip.id).then(res => {
+        if (cancelled) return;
+        const manifest = res.manifest;
+        const sel = selectInterval(manifest.intervals, p.totalSec);
+        if (sel) {
+          setIntervalSec(sel.intervalSec);
+          setTimes(sel.times);
+        } else {
+          setIntervalSec(null);
+          setTimes([]);
         }
-      }
-      // 全て空
-      setIntervalSec(null);
-      setTimes([]);
-    }).catch(() => {
-      if (cancelled) return;
-      toast('サムネイルの取得に失敗しました', 'error');
-    });
+        if (minIntervalCoverage(manifest.intervals, p.totalSec) < 1) {
+          timer = setTimeout(fetchOnce, POLL_INTERVAL_MS);
+        }
+      }).catch(() => {
+        if (cancelled) return;
+        toast('サムネイルの取得に失敗しました', 'error');
+      });
+    };
 
-    return () => { cancelled = true; };
-  }, [p.clip.id]);
+    fetchOnce();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [p.clip.id, p.totalSec]);
 
   // ResizeObserver
   useEffect(() => {
@@ -80,20 +89,23 @@ export function ThumbnailStrip({ pendingInSec, sceneTimes }: ThumbnailStripProps
     return () => ro.disconnect();
   }, []);
 
+  // スロット総数はクリップ全長 × interval のみで決まる(生成済み枚数に依存しない)
+  const slotCount = intervalSec !== null ? computeSlotCount(p.totalSec, intervalSec) : 0;
+
   // 自動追従スクロール
   useEffect(() => {
-    if (times.length === 0 || intervalSec === null) return;
+    if (intervalSec === null || slotCount === 0) return;
     const el = scrollerRef.current;
     if (!el) return;
     if (Date.now() - lastUserScrollRef.current > 3000) {
-      const currentIndex = timeToIndex(times, p.virtualTimeSec);
-      const spacerWidth = times.length * 160;
+      const currentSlot = timeToSlot(p.virtualTimeSec, intervalSec, slotCount);
+      const spacerWidth = slotCount * 160;
       const maxScroll = spacerWidth - viewportWidth;
-      const target = scrollToCenter(currentIndex, 160, viewportWidth, maxScroll);
+      const target = scrollToCenter(currentSlot, 160, viewportWidth, maxScroll);
       isProgrammaticScrollRef.current = true;
       el.scrollLeft = target;
     }
-  }, [p.virtualTimeSec, times, intervalSec, viewportWidth]);
+  }, [p.virtualTimeSec, intervalSec, slotCount, viewportWidth]);
 
   const handleScroll = () => {
     const el = scrollerRef.current;
@@ -106,7 +118,12 @@ export function ThumbnailStrip({ pendingInSec, sceneTimes }: ThumbnailStripProps
     setScrollLeft(el.scrollLeft);
   };
 
-  if (intervalSec === null || times.length === 0) {
+  const slotMap = useMemo(() => {
+    if (intervalSec === null) return new Map<number, number>();
+    return buildSlotMap(times, intervalSec, slotCount);
+  }, [times, intervalSec, slotCount]);
+
+  if (intervalSec === null || slotCount === 0) {
     return (
       <div className="strip">
         <div className="empty">サムネイル生成待ち</div>
@@ -114,14 +131,14 @@ export function ThumbnailStrip({ pendingInSec, sceneTimes }: ThumbnailStripProps
     );
   }
 
-  const spacerWidth = times.length * 160;
+  const spacerWidth = slotCount * 160;
   const maxScroll = spacerWidth - viewportWidth;
-  const currentIndex = timeToIndex(times, p.virtualTimeSec);
+  const currentSlot = timeToSlot(p.virtualTimeSec, intervalSec, slotCount);
   const { startIndex, endIndex } = computeVisibleRange({
     thumbWidth: 160,
     viewportWidth,
     scrollLeft,
-    count: times.length,
+    count: slotCount,
     buffer: 4,
   });
 
@@ -131,22 +148,42 @@ export function ThumbnailStrip({ pendingInSec, sceneTimes }: ThumbnailStripProps
 
   const thumbs: React.ReactNode[] = [];
   for (let i = startIndex; i < endIndex; i++) {
-    const t = times[i] ?? 0;
-    const isCurrent = i === currentIndex;
-    thumbs.push(
-      <img
-        key={i}
-        className={isCurrent ? 'thumb current' : 'thumb'}
-        src={thumbUrl(p.clip.id, intervalSec, t)}
-        alt={String(t)}
-        style={{
-          position: 'absolute',
-          left: indexToOffset(i, 160),
-          width: 160,
-        }}
-        onClick={() => p.seekTo(t)}
-      />
-    );
+    const isCurrent = i === currentSlot;
+    const generatedTime = slotMap.get(i);
+    if (generatedTime !== undefined) {
+      thumbs.push(
+        <img
+          key={i}
+          className={isCurrent ? 'thumb current' : 'thumb'}
+          src={thumbUrl(p.clip.id, intervalSec, generatedTime)}
+          alt={String(generatedTime)}
+          style={{
+            position: 'absolute',
+            left: indexToOffset(i, 160),
+            width: 160,
+          }}
+          onClick={() => p.seekTo(generatedTime)}
+        />,
+      );
+    } else {
+      // 未生成スロット: k*intervalSec へのシーク導線を残しつつ控えめなプレースホルダを出す
+      const slotTimeSec = i * intervalSec;
+      thumbs.push(
+        <div
+          key={i}
+          className={isCurrent ? 'thumb pending current' : 'thumb pending'}
+          style={{
+            position: 'absolute',
+            left: indexToOffset(i, 160),
+            width: 160,
+          }}
+          onClick={() => p.seekTo(slotTimeSec)}
+          title="サムネイル未生成"
+        >
+          ⋯
+        </div>,
+      );
+    }
   }
 
   return (

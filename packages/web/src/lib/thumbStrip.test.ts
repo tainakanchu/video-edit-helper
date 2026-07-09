@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildSlotMap,
+  computeCoverage,
+  computeSlotCount,
   computeVisibleRange,
   indexToOffset,
+  minIntervalCoverage,
   scrollToCenter,
-  timeToIndex,
+  selectInterval,
+  timeToSlot,
 } from './thumbStrip';
 
 describe('computeVisibleRange', () => {
@@ -47,23 +52,130 @@ describe('indexToOffset', () => {
   });
 });
 
-describe('timeToIndex', () => {
-  const times = [0, 10, 20, 30, 40, 50];
+describe('computeSlotCount', () => {
+  it('クリップ全長を interval で割った枠数(端数切り捨て+1)', () => {
+    // 50分クリップ = 3000秒
+    expect(computeSlotCount(3000, 60)).toBe(51);
+    expect(computeSlotCount(3000, 10)).toBe(301);
+  });
 
-  it('完全一致', () => {
-    expect(timeToIndex(times, 30)).toBe(3);
+  it('割り切れない場合も切り捨て+1', () => {
+    // 0, 60, 120 の3枠(125秒の場合)
+    expect(computeSlotCount(125, 60)).toBe(3);
   });
-  it('範囲外は端にクランプ', () => {
-    expect(timeToIndex(times, -5)).toBe(0);
-    expect(timeToIndex(times, 999)).toBe(5);
+
+  it('全長 0 でも最低 1 枠', () => {
+    expect(computeSlotCount(0, 10)).toBe(1);
   });
-  it('最近傍を選ぶ', () => {
-    expect(timeToIndex(times, 12)).toBe(1); // 10 に近い
-    expect(timeToIndex(times, 17)).toBe(2); // 20 に近い
-    expect(timeToIndex(times, 15)).toBe(1); // 等距離は手前
+});
+
+describe('timeToSlot', () => {
+  const slotCount = computeSlotCount(3000, 60); // 51
+
+  it('interval 単位で丸めてスロットを返す', () => {
+    expect(timeToSlot(0, 60, slotCount)).toBe(0);
+    expect(timeToSlot(65, 60, slotCount)).toBe(1);
+    expect(timeToSlot(95, 60, slotCount)).toBe(2);
   });
-  it('空配列は 0', () => {
-    expect(timeToIndex([], 10)).toBe(0);
+
+  it('範囲外は端にクランプする(生成済み枚数に関係なく全長ベース)', () => {
+    expect(timeToSlot(-10, 60, slotCount)).toBe(0);
+    expect(timeToSlot(999999, 60, slotCount)).toBe(50);
+  });
+
+  it('slotCount が 1 以下なら常に 0', () => {
+    expect(timeToSlot(500, 60, 1)).toBe(0);
+    expect(timeToSlot(500, 60, 0)).toBe(0);
+  });
+});
+
+describe('buildSlotMap', () => {
+  it('生成済み時刻をスロット index にマップする', () => {
+    const map = buildSlotMap([0, 60, 120], 60, 51);
+    expect(map.get(0)).toBe(0);
+    expect(map.get(1)).toBe(60);
+    expect(map.get(2)).toBe(120);
+    expect(map.size).toBe(3);
+  });
+
+  it('同一スロットに丸まる時刻が複数あれば先勝ち', () => {
+    const map = buildSlotMap([58, 61], 60, 51); // どちらも slot 1 に丸まる
+    expect(map.get(1)).toBe(58);
+    expect(map.size).toBe(1);
+  });
+
+  it('未生成のスロットにはエントリが無い(呼び出し側でプレースホルダ判定に使う)', () => {
+    const map = buildSlotMap([0], 60, 51);
+    expect(map.has(1)).toBe(false);
+  });
+});
+
+describe('computeCoverage', () => {
+  it('生成数 / スロット数', () => {
+    expect(computeCoverage(51, 51)).toBe(1);
+    expect(computeCoverage(3, 301)).toBeCloseTo(3 / 301);
+  });
+
+  it('上限は 1(超過分は丸める)', () => {
+    expect(computeCoverage(400, 301)).toBe(1);
+  });
+
+  it('スロット数 0 は 0', () => {
+    expect(computeCoverage(5, 0)).toBe(0);
+  });
+});
+
+describe('selectInterval', () => {
+  it('カバレッジ最大の interval を採用する(完了済みの粗い間隔を未完の密な間隔より優先)', () => {
+    // 50分クリップ: 粗(60s)は51枚全て生成済み、密(10s)はまだ3枚だけ
+    const intervals: Record<string, number[]> = {
+      '60': Array.from({ length: 51 }, (_, i) => i * 60),
+      '10': [0, 10, 20],
+    };
+    const sel = selectInterval(intervals, 3000);
+    expect(sel?.intervalSec).toBe(60);
+    expect(sel?.coverage).toBe(1);
+    expect(sel?.times.length).toBe(51);
+  });
+
+  it('カバレッジが同率なら小さい interval(密なほう)を優先する', () => {
+    const intervals: Record<string, number[]> = {
+      '30': [0, 30], // slotCount=4, coverage=0.5
+      '10': [0, 10, 20, 30, 40], // slotCount=10, coverage=0.5
+    };
+    const sel = selectInterval(intervals, 90);
+    expect(sel?.intervalSec).toBe(10);
+    expect(sel?.coverage).toBe(0.5);
+  });
+
+  it('生成済みが1枚も無ければ null', () => {
+    expect(selectInterval({ '10': [], '60': [] }, 3000)).toBeNull();
+  });
+
+  it('intervals が空でも null', () => {
+    expect(selectInterval({}, 3000)).toBeNull();
+  });
+});
+
+describe('minIntervalCoverage', () => {
+  it('最小 interval が未完なら 1 未満(粗い間隔が完了していても)', () => {
+    const intervals: Record<string, number[]> = {
+      '60': Array.from({ length: 51 }, (_, i) => i * 60), // 完了
+      '10': [0, 10, 20], // 未完
+    };
+    expect(minIntervalCoverage(intervals, 3000)).toBeCloseTo(3 / 301);
+  });
+
+  it('最小 interval も完了していれば 1', () => {
+    const intervals: Record<string, number[]> = {
+      '60': Array.from({ length: 51 }, (_, i) => i * 60),
+      '10': Array.from({ length: 301 }, (_, i) => i * 10),
+    };
+    expect(minIntervalCoverage(intervals, 3000)).toBe(1);
+  });
+
+  it('intervals が空なら 0', () => {
+    expect(minIntervalCoverage({}, 100)).toBe(0);
   });
 });
 

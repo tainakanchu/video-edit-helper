@@ -576,6 +576,16 @@ a {
   outline-offset: -2px;
   z-index: 2;
 }
+.strip .thumb.pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 16px;
+  cursor: pointer;
+}
 .strip .pin {
   position: absolute;
   top: 0;
