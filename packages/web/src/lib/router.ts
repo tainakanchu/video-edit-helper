@@ -24,7 +24,13 @@ export type Route =
   | { name: 'day'; dayId: ID }
   | { name: 'triage'; dayId: ID }
   | { name: 'clip'; clipId: ID; t: number | null }
-  | { name: 'search'; q: string };
+  | { name: 'search'; q: string }
+  | { name: 'edl'; edlId: string | null; t: number | null };
+
+function parseT(params: URLSearchParams): number | null {
+  const tRaw = params.get('t');
+  return tRaw !== null && tRaw !== '' && Number.isFinite(Number(tRaw)) ? Number(tRaw) : null;
+}
 
 /** pathname + search 文字列(例: '?t=12.5')から Route を導出する純関数 */
 export function parseRoute(pathname: string, search = ''): Route {
@@ -42,6 +48,11 @@ export function parseRoute(pathname: string, search = ''): Route {
     if (segs[0] === 'setup') return { name: 'setup' };
     if (segs[0] === 'map') return { name: 'map' };
     if (segs[0] === 'search') return { name: 'search', q: params.get('q') ?? '' };
+    if (segs[0] === 'edl') return { name: 'edl', edlId: null, t: parseT(params) };
+  }
+
+  if (segs[0] === 'edl' && segs[1] && segs.length === 2) {
+    return { name: 'edl', edlId: decodeURIComponent(segs[1]), t: parseT(params) };
   }
 
   if (segs[0] === 'day' && segs[1]) {
@@ -52,9 +63,7 @@ export function parseRoute(pathname: string, search = ''): Route {
 
   if (segs[0] === 'clip' && segs[1] && segs.length === 2) {
     const clipId = decodeURIComponent(segs[1]);
-    const tRaw = params.get('t');
-    const t = tRaw !== null && tRaw !== '' && Number.isFinite(Number(tRaw)) ? Number(tRaw) : null;
-    return { name: 'clip', clipId, t };
+    return { name: 'clip', clipId, t: parseT(params) };
   }
 
   // 不明パス
@@ -84,6 +93,11 @@ export function buildPath(route: Route): string {
     case 'search': {
       if (route.q) return `/search?q=${encodeURIComponent(route.q)}`;
       return '/search';
+    }
+    case 'edl': {
+      const base = route.edlId ? `/edl/${encodeURIComponent(route.edlId)}` : '/edl';
+      if (route.t !== null && Number.isFinite(route.t)) return `${base}?t=${route.t}`;
+      return base;
     }
   }
 }

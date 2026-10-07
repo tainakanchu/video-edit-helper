@@ -9,6 +9,7 @@ import { TriageView } from './components/TriageView';
 import { SearchView } from './components/SearchView';
 import { SetupView } from './components/SetupView';
 import { MapView } from './components/MapView';
+import { TimelineView } from './components/TimelineView';
 import { JobsIndicator } from './components/JobsIndicator';
 import { SearchBox } from './components/SearchBox';
 import { Toasts } from './components/Toasts';
@@ -58,6 +59,19 @@ export function App() {
         <SearchBox />
         <span className="spacer" />
         <button
+          className={route.name === 'edl' ? 'ghost active' : 'ghost'}
+          onClick={() =>
+            navigate({
+              name: 'edl',
+              edlId: project?.settings.activeEdlId ?? null,
+              t: null,
+            })
+          }
+          title="EDL の完成形をプレビュー"
+        >
+          タイムライン
+        </button>
+        <button
           className={route.name === 'map' ? 'ghost active' : 'ghost'}
           onClick={() => navigate({ name: 'map' })}
           title="撮影地の地図"
@@ -96,6 +110,8 @@ function Body({ route }: { route: Route }) {
       return <SetupView />;
     case 'map':
       return <MapView />;
+    case 'edl':
+      return <TimelineView key={route.edlId ?? ''} edlId={route.edlId} initialSeekSec={route.t} />;
     case 'clip':
       return <ClipView key={route.clipId} clipId={route.clipId} initialSeekSec={route.t} />;
     case 'triage':

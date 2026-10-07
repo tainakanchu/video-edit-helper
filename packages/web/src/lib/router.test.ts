@@ -52,6 +52,15 @@ describe('parseRoute', () => {
     expect(parseRoute('/search')).toEqual({ name: 'search', q: '' });
   });
 
+  it('/edl と /edl/:id?t=', () => {
+    expect(parseRoute('/edl')).toEqual({ name: 'edl', edlId: null, t: null });
+    expect(parseRoute('/edl/abc', '?t=12.5')).toEqual({ name: 'edl', edlId: 'abc', t: 12.5 });
+    expect(parseRoute('/edl/abc', '?t=0')).toEqual({ name: 'edl', edlId: 'abc', t: 0 });
+    expect(parseRoute('/edl/a%20b')).toEqual({ name: 'edl', edlId: 'a b', t: null });
+    expect(buildPath({ name: 'edl', edlId: 'a b', t: 1 })).toBe('/edl/a%20b?t=1');
+    expect(buildPath({ name: 'edl', edlId: null, t: null })).toBe('/edl');
+  });
+
   it('/search?q=...(URL エンコード解除)', () => {
     expect(parseRoute('/search', '?q=' + encodeURIComponent('絶景 飯'))).toEqual({
       name: 'search',

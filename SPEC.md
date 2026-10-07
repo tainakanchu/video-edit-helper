@@ -135,3 +135,13 @@ Trip(撮影プロジェクト全体)
 2. **M2**: 範囲選定+付箋トリアージ → 再生不可素材のプロキシ → FCPXML ラフカット書き出し → DaVinci で開けることを実機確認
 3. **M3**: whisper.cpp 文字起こし(VAD 区間のみ)+夜間バッチ運用+検索
 4. **M4**: 地図・シーン分割など、使ってみて欲しくなったもの
+
+## 10. EDL タイムライン
+
+完成形の EDL（JSON）をプロジェクトに登録し、`/edl/:id` で時間軸プレビューする。書き出しはしない。型と再生計画の純関数は `@veh/shared`、読み込み・パス解決・Range 配信・コメントはサーバー、画面は `TimelineView`。
+
+- 入力は `title` / `fps` / `durationSec` / `chapters` / `segments`（rt, hl, ph, photo, photos, black, card, opener）/ `music` / `subtitles` / `xposts`。区間の中間ファイル（`<id>.mp4`）があればそれを優先する。付帯情報 `<id>.mp4.json` があれば `type` が一致し `dur` の差が 0.05 秒以内のときだけ使い、合わなければ理由を表示して中間が無いときと同じ扱いにする。付帯情報が無ければ使うが「未検証」と表示する
+- 時刻の基準はマスタークロック。次区間の video を先読みして境界で切り替え、再生できない区間は理由を表示して尺だけ進める
+- 音楽は gainDb・フェード・発話字幕中のダッキングを近似する。プレビュー音量は media 要素の volume で、上限は 1
+- コメントは EDL の隣の `<edl>.comments.json`（`{version:1, comments[]}`）。EDL 本体と素材ファイルは書き換えない
+- パスは実行 OS 向けに `src` / `srcWin` を解決する。置換ルールと WSL ディストリビューション名は settings に持つ

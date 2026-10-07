@@ -22,6 +22,15 @@ import {
   type ThumbsResponse,
   type TranscriptResponse,
   type UpdateNoteRequest,
+  type ActivateEdlRequest,
+  type AddEdlRequest,
+  type CreateEdlCommentRequest,
+  type EdlCommentResponse,
+  type EdlCommentsResponse,
+  type EdlSourcesResponse,
+  type EdlTimelineResponse,
+  type UpdateEdlRequest,
+  type UpdatePathRewritesRequest,
   type UpdateSelectionRequest,
   type UpdateSettingsRequest,
   type VadResponse,
@@ -142,6 +151,33 @@ export const api = {
     request<ScenesResponse | null>(apiPaths.clipScenes(clipId), { allow404: true }),
 
   search: (query: string) => request<SearchResponse>(apiPaths.search(query)),
+
+  getEdls: () => request<EdlSourcesResponse>(apiPaths.edls()),
+
+  addEdl: (req: AddEdlRequest) =>
+    request<EdlSourcesResponse>(apiPaths.edls(), { method: 'POST', body: req }),
+
+  updateEdl: (id: ID, req: UpdateEdlRequest) =>
+    request<EdlSourcesResponse>(apiPaths.edlItem(id), { method: 'PATCH', body: req }),
+
+  removeEdl: (id: ID) =>
+    request<EdlSourcesResponse>(apiPaths.edlItem(id), { method: 'DELETE' }),
+
+  activateEdl: (req: ActivateEdlRequest) =>
+    request<EdlSourcesResponse>(apiPaths.edlActive(), { method: 'POST', body: req }),
+
+  updatePathRewrites: (req: UpdatePathRewritesRequest) =>
+    request<EdlSourcesResponse>(apiPaths.edlPathRewrites(), { method: 'PUT', body: req }),
+
+  getEdlTimeline: (id: ID) => request<EdlTimelineResponse>(apiPaths.edlTimeline(id)),
+
+  getEdlComments: (id: ID) => request<EdlCommentsResponse>(apiPaths.edlComments(id)),
+
+  addEdlComment: (id: ID, req: CreateEdlCommentRequest) =>
+    request<EdlCommentResponse>(apiPaths.edlComments(id), { method: 'POST', body: req }),
+
+  deleteEdlComment: (id: ID, commentId: ID) =>
+    request<void>(apiPaths.edlComment(id, commentId), { method: 'DELETE' }),
 };
 
 /** メディア / サムネイル画像 URL(<video> や <img> の src に直接渡す) */

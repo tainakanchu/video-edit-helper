@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Clip, ProjectSettings } from '@veh/shared';
+import { defaultSettings, type Clip, type ProjectSettings } from '@veh/shared';
 import {
   buildDays,
   buildDaysAndClips,
@@ -15,11 +15,8 @@ import {
 } from './grouping.js';
 
 const settings: ProjectSettings = {
+  ...defaultSettings,
   mediaRoots: ['/media'],
-  dayStartHour: 4,
-  thumbCoarseIntervalSec: 60,
-  thumbFineIntervalSec: 10,
-  proxyAllFiles: false,
 };
 
 const GB = 1024 * 1024 * 1024;

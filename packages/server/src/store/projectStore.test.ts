@@ -515,3 +515,33 @@ describe('読めない保存先(OneDrive 等のデータレス/破損)でも本�
     );
   });
 });
+
+describe('EDL ソース', () => {
+  it('追加・更新・削除で active が追従する', () => {
+    const store = newStore();
+    expect(store.getSettings().edlSources).toEqual([]);
+    store.upsertEdl({ id: 'e1', path: '/a.json', label: 'A', cacheDir: '' }, true);
+    store.upsertEdl({ id: 'e2', path: '/b.json', label: 'B', cacheDir: '/c' }, true);
+    expect(store.getSettings().activeEdlId).toBe('e2');
+    expect(store.updateEdl('e1', { cacheDir: '/cache' })?.cacheDir).toBe('/cache');
+    expect(store.removeEdl('e2')).toBe(true);
+    expect(store.getSettings().activeEdlId).toBe('e1');
+    expect(store.getSettings().edlSources).toHaveLength(1);
+  });
+
+  it('旧 project.json でも edlSources は空配列になる', () => {
+    const legacy = {
+      version: 2,
+      settings: { mediaRoots: [], dayStartHour: 4, thumbCoarseIntervalSec: 60, thumbFineIntervalSec: 10, proxyAllFiles: false },
+      days: [],
+      clips: {},
+      notes: {},
+      selections: {},
+    };
+    fs.writeFileSync(projectFile, JSON.stringify(legacy));
+    const store = newStore();
+    expect(store.getSettings().edlSources).toEqual([]);
+    expect(store.getSettings().activeEdlId).toBeNull();
+    expect(store.getSettings().pathRewrites).toEqual([]);
+  });
+});

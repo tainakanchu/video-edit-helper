@@ -11,6 +11,10 @@ describe('contentTypeFor', () => {
   it('.m4v → video/mp4', () => {
     expect(contentTypeFor('/a/b.m4v')).toBe('video/mp4');
   });
+  it('.jpg / .mp3', () => {
+    expect(contentTypeFor('/a/b.JPG')).toBe('image/jpeg');
+    expect(contentTypeFor('/a/b.mp3')).toBe('audio/mpeg');
+  });
 });
 
 describe('parseRange', () => {

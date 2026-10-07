@@ -17,6 +17,12 @@ import type {
   Transcript,
   VadResult,
 } from './types.js';
+import type {
+  EdlComment,
+  EdlSource,
+  EdlTimeline,
+  PathRewrite,
+} from './edl.js';
 
 export const SERVER_PORT_DEFAULT = 4810;
 
@@ -28,6 +34,10 @@ export const defaultSettings: ProjectSettings = {
   proxyAllFiles: false,
   cameraTimeOffsets: {},
   rootTimeOffsets: {},
+  edlSources: [],
+  activeEdlId: null,
+  pathRewrites: [],
+  wslDistro: '',
 };
 
 /**
@@ -81,7 +91,73 @@ export const apiPaths = {
   clipScenes: (clipId: ID) => `/api/clips/${clipId}/scenes`,
   /** GET ?q=... → SearchResponse(メモ・選定・文字起こしの横断検索) */
   search: (query: string) => `/api/search?q=${encodeURIComponent(query)}`,
+  /** GET → EdlSourcesResponse / POST AddEdlRequest → EdlSourcesResponse */
+  edls: () => `/api/edl`,
+  /** POST ActivateEdlRequest → EdlSourcesResponse */
+  edlActive: () => `/api/edl/active`,
+  /** PUT UpdatePathRewritesRequest → EdlSourcesResponse */
+  edlPathRewrites: () => `/api/edl/path-rewrites`,
+  /** PATCH UpdateEdlRequest → EdlSourcesResponse / DELETE → EdlSourcesResponse */
+  edlItem: (id: ID) => `/api/edl/${encodeURIComponent(id)}`,
+  /** GET → EdlTimelineResponse */
+  edlTimeline: (id: ID) => `/api/edl/${encodeURIComponent(id)}/timeline`,
+  /**
+   * GET。Range 対応の素材配信。
+   * role は segment | source | image | realaudio | music。key は区間 id など（生パスは渡さない）。
+   */
+  edlAsset: (id: ID, role: string, key: string) =>
+    `/api/edl/${encodeURIComponent(id)}/asset/${encodeURIComponent(role)}/${encodeURIComponent(key)}`,
+  /** GET → EdlCommentsResponse / POST CreateEdlCommentRequest → EdlCommentResponse */
+  edlComments: (id: ID) => `/api/edl/${encodeURIComponent(id)}/comments`,
+  /** DELETE → 204 */
+  edlComment: (id: ID, commentId: ID) =>
+    `/api/edl/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
 } as const;
+
+export interface AddEdlRequest {
+  path: string;
+  cacheDir?: string;
+  label?: string;
+}
+
+export interface UpdateEdlRequest {
+  label?: string;
+  cacheDir?: string;
+}
+
+export interface ActivateEdlRequest {
+  id: string | null;
+}
+
+export interface EdlSourcesResponse {
+  sources: EdlSource[];
+  activeEdlId: string | null;
+  pathRewrites: PathRewrite[];
+  wslDistro: string;
+}
+
+export interface UpdatePathRewritesRequest {
+  pathRewrites: PathRewrite[];
+  wslDistro?: string;
+}
+
+export interface EdlTimelineResponse {
+  timeline: EdlTimeline;
+}
+
+export interface CreateEdlCommentRequest {
+  segmentId: string;
+  timeSec: number;
+  text: string;
+}
+
+export interface EdlCommentsResponse {
+  comments: EdlComment[];
+}
+
+export interface EdlCommentResponse {
+  comment: EdlComment;
+}
 
 export interface ProjectResponse {
   project: ProjectState;
