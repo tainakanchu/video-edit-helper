@@ -10,6 +10,8 @@ import {
   type ID,
   type Note,
   type NoteStatus,
+  type EdlSource,
+  type PathRewrite,
   type ProjectSettings,
   type ProjectState,
   type ReviewStatus,
@@ -86,7 +88,13 @@ export class ProjectStore {
       if (!state.selections) state.selections = {};
       // Phase 4 マイグレーション: 旧データに無い設定キー(proxyAllFiles 等)を
       // defaultSettings で補完する
-      state.settings = { ...defaultSettings, ...state.settings };
+      state.settings = {
+        ...defaultSettings,
+        ...state.settings,
+        // defaultSettings の配列を共有したまま push しない
+        edlSources: [...(state.settings.edlSources ?? [])],
+        pathRewrites: [...(state.settings.pathRewrites ?? [])],
+      };
 
       // v1 → v2 マイグレーション: ID をパス由来から内容指紋由来へ移行する。
       // 素材を別ドライブへ移動してもメモ・選定・レビュー・キャッシュが
@@ -120,7 +128,11 @@ export class ProjectStore {
       state = {
         // 新規作成は最初から v2(指紋由来 ID)
         version: 2,
-        settings: { ...defaultSettings },
+        settings: {
+          ...defaultSettings,
+          edlSources: [],
+          pathRewrites: [],
+        },
         days: [],
         clips: {},
         notes: {},
@@ -161,6 +173,58 @@ export class ProjectStore {
     this.state.settings = { ...this.state.settings, ...partial };
     this.scheduleSave();
     return this.state.settings;
+  }
+
+  /** id が同じなら置き換え、無ければ追加する。makeActive なら activeEdlId をそれに */
+  upsertEdl(source: EdlSource, makeActive: boolean): void {
+    const list = [...(this.state.settings.edlSources ?? [])];
+    const i = list.findIndex((s) => s.id === source.id);
+    if (i >= 0) list[i] = source;
+    else list.push(source);
+    this.state.settings.edlSources = list;
+    if (makeActive) this.state.settings.activeEdlId = source.id;
+    this.scheduleSave();
+  }
+
+  updateEdl(
+    id: string,
+    patch: { label?: string; cacheDir?: string },
+  ): EdlSource | undefined {
+    const list = this.state.settings.edlSources ?? [];
+    const cur = list.find((s) => s.id === id);
+    if (!cur) return undefined;
+    if (patch.label !== undefined) cur.label = patch.label;
+    if (patch.cacheDir !== undefined) cur.cacheDir = patch.cacheDir;
+    this.scheduleSave();
+    return cur;
+  }
+
+  /** 消したのが active なら、残りの先頭か null にする */
+  removeEdl(id: string): boolean {
+    const list = this.state.settings.edlSources ?? [];
+    const next = list.filter((s) => s.id !== id);
+    if (next.length === list.length) return false;
+    this.state.settings.edlSources = next;
+    if (this.state.settings.activeEdlId === id) {
+      this.state.settings.activeEdlId = next[0]?.id ?? null;
+    }
+    this.scheduleSave();
+    return true;
+  }
+
+  setActiveEdl(id: string | null): boolean {
+    if (id !== null && !(this.state.settings.edlSources ?? []).some((s) => s.id === id)) {
+      return false;
+    }
+    this.state.settings.activeEdlId = id;
+    this.scheduleSave();
+    return true;
+  }
+
+  setPathRewrites(rewrites: PathRewrite[], wslDistro?: string): void {
+    this.state.settings.pathRewrites = rewrites;
+    if (wslDistro !== undefined) this.state.settings.wslDistro = wslDistro;
+    this.scheduleSave();
   }
 
   /**

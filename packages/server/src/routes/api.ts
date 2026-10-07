@@ -34,6 +34,7 @@ import { searchAll } from '../search/matcher.js';
 import type { TranscriptCache } from '../search/transcriptCache.js';
 import type { JobCoordinator } from '../jobs/coordinator.js';
 import type { MountStore } from '../media/mounts.js';
+import { registerEdlRoutes } from '../edl/http.js';
 
 const settingsSchema = z.object({
   settings: z
@@ -47,6 +48,19 @@ const settingsSchema = z.object({
       cameraTimeOffsets: z.record(z.string(), z.number().int().min(-1440).max(1440)).optional(),
       // 素材ルート(mediaRoots の要素)→ 補正分(符号付き整数)。±24h を上限にガード
       rootTimeOffsets: z.record(z.string(), z.number().int().min(-1440).max(1440)).optional(),
+      edlSources: z
+        .array(
+          z.object({
+            id: z.string(),
+            path: z.string(),
+            label: z.string(),
+            cacheDir: z.string(),
+          }),
+        )
+        .optional(),
+      activeEdlId: z.string().nullable().optional(),
+      pathRewrites: z.array(z.object({ from: z.string(), to: z.string() })).optional(),
+      wslDistro: z.string().optional(),
     })
     .strict(),
 });
@@ -139,6 +153,9 @@ function findDayIdForClip(store: ProjectStore, clipId: string): string | undefin
 /** shared の apiPaths が定義する全エンドポイントを登録 */
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { config, store, queue, coordinator, transcriptCache, mounts } = deps;
+
+  // EDL タイムライン。/api/edl/active 等の静的パスを先に登録する
+  registerEdlRoutes(app, store);
 
   // GET /api/health
   app.get(apiPaths.health(), async () => ({ status: 'ok' }));

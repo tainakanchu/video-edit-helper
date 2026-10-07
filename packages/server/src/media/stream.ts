@@ -6,6 +6,17 @@ export function contentTypeFor(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.mp4' || ext === '.m4v') return 'video/mp4';
   if (ext === '.mov') return 'video/quicktime';
+  if (ext === '.webm') return 'video/webm';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.m4a') return 'audio/mp4';
+  if (ext === '.aac') return 'audio/aac';
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.flac') return 'audio/flac';
+  if (ext === '.ogg') return 'audio/ogg';
   return 'application/octet-stream';
 }
 
