@@ -1,3 +1,5 @@
+import type { EdlSource, PathRewrite } from './edl.js';
+
 export type ID = string;
 
 /** 秒単位の区間。クリップの「通しタイムコード」基準 */
@@ -102,6 +104,17 @@ export interface ProjectSettings {
       ルート配下の全素材に適用。cameraTimeOffsets(機器ごと)が同じ素材に指定されていれば
       そちらが優先(上書き。加算ではない)。設定保存時に既存クリップへ即時反映される(再スキャン不要)。 */
   rootTimeOffsets?: Record<string, number>;
+  /** 取り込んだ EDL。完成形プレビューの一覧 */
+  edlSources: EdlSource[];
+  /** 最後に開いていた EDL。無ければ null */
+  activeEdlId: string | null;
+  /** 素材パスの前方一致置換。実行環境に合わせて読み替える */
+  pathRewrites: PathRewrite[];
+  /**
+   * Windows から WSL の /home を \\wsl$\<name>\... で読むときのディストロ名。
+   * 空ならサーバ側の既定候補を試す。
+   */
+  wslDistro: string;
 }
 
 /** 選定範囲(Phase 2)。付箋からの昇格またはイン/アウト点打ちで作成 */
