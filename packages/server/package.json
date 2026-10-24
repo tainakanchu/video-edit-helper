@@ -20,7 +20,7 @@
     "@veh/shared": "workspace:*",
     "fastify": "^5.0.0",
     "fflate": "^0.8.3",
-    "nanoid": "^5.0.0",
+    "nanoid": "^5.1.16",
     "onnxruntime-node": "^1.20.0",
     "zod": "^3.24.0"
   },
