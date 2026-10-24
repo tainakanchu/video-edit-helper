@@ -4,13 +4,14 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { locateInFiles, type Clip, type FileSpan, type ThumbManifest } from '@veh/shared';
 import type { Config } from '../config.js';
+import { safeIdSegment } from '../ids.js';
 
 /** ジョブ内のフレーム抽出並列数 */
 const FRAME_CONCURRENCY = 2;
 
 /** clip × interval のサムネイル出力ディレクトリ */
 export function thumbDir(config: Config, clipId: string, intervalSec: number): string {
-  return path.join(config.thumbsDir, clipId, String(intervalSec));
+  return path.join(config.thumbsDir, safeIdSegment(clipId), String(intervalSec));
 }
 
 /** 個別フレームの出力パス(整数秒) */
@@ -120,7 +121,7 @@ export async function generateThumbs(
 /** GET 時にディレクトリ走査で ThumbManifest を構築 */
 export async function buildThumbManifest(config: Config, clipId: string): Promise<ThumbManifest> {
   const intervals: Record<string, number[]> = {};
-  const base = path.join(config.thumbsDir, clipId);
+  const base = path.join(config.thumbsDir, safeIdSegment(clipId));
   let intervalDirs: string[];
   try {
     intervalDirs = await fsp.readdir(base);

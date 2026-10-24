@@ -25,6 +25,14 @@ export interface Config {
   /** 素材ルートの「このマシンでの実パス」対応表(ローカル・非同期)。cross-OS 解決用 */
   mountsFile: string;
   port: number;
+  /** listen するアドレス。既定は 127.0.0.1(LAN へは公開しない)。VEH_HOST で明示的に変える */
+  host: string;
+  /** Host ヘッダとして追加で許可する値(VEH_ALLOWED_HOSTS、カンマ区切り。例: 192.168.1.10:4810) */
+  extraAllowedHosts: string[];
+  /** Origin として追加で許可する値(VEH_ALLOWED_ORIGINS、カンマ区切り) */
+  extraAllowedOrigins: string[];
+  /** 起動ごとの API トークンを書き出すファイル(dev の vite proxy が読む)。null なら書かない */
+  devTokenFile: string | null;
   ffmpegPath: string;
   ffprobePath: string;
   /** Silero VAD の ONNX モデルパス */
@@ -66,6 +74,20 @@ function defaultWhisperModelPath(): string {
   return path.resolve(here, '..', 'models', 'ggml-small.bin');
 }
 
+/** packages/server/.dev-token を import.meta.url 基準で解決(vite.config.ts と同じ場所) */
+function defaultDevTokenFile(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  // src/ または dist/ 配下 → 一つ上
+  return path.resolve(here, '..', '.dev-token');
+}
+
+function splitList(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => v !== '');
+}
+
 /** whisper のデフォルトスレッド数: CPU コア数 − 2(最低 2) */
 function defaultWhisperThreads(): number {
   const cpus = os.cpus().length || 4;
@@ -84,6 +106,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // 解析結果(文字起こし・シーン・VAD)は小さく再生成コストが高いので projectDir 側に置き、
   // project.json と一緒に同期できるようにする。
   const analysisDir = path.join(projectDir, 'cache');
+  const autoProvision = env.VEH_AUTO_PROVISION === '1' || env.VEH_AUTO_PROVISION === 'true';
   const config: Config = {
     projectDir,
     projectFile: path.join(projectDir, 'project.json'),
@@ -98,6 +121,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // 対応表はローカル(非同期)。既定は大容量キャッシュと同じローカル領域に置く
     mountsFile: env.VEH_MOUNTS_FILE ?? path.join(bulkyCacheDir, 'mounts.json'),
     port: env.PORT ? Number(env.PORT) : SERVER_PORT_DEFAULT,
+    host: env.VEH_HOST || '127.0.0.1',
+    extraAllowedHosts: splitList(env.VEH_ALLOWED_HOSTS),
+    extraAllowedOrigins: splitList(env.VEH_ALLOWED_ORIGINS),
+    // パッケージ版(Tauri)はトークンを stdout で親に渡すのでファイルは書かない
+    devTokenFile: env.VEH_DEV_TOKEN_FILE ?? (autoProvision ? null : defaultDevTokenFile()),
     ffmpegPath: env.FFMPEG_PATH ?? 'ffmpeg',
     ffprobePath: env.FFPROBE_PATH ?? 'ffprobe',
     vadModelPath: env.VEH_VAD_MODEL ?? defaultVadModelPath(),
@@ -107,7 +135,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     whisperLanguage: env.VEH_WHISPER_LANG ?? 'auto',
     webDistDir: env.VEH_WEB_DIST ?? defaultWebDistDir(),
     disableSilero: env.VEH_DISABLE_SILERO === '1' || env.VEH_DISABLE_SILERO === 'true',
-    autoProvision: env.VEH_AUTO_PROVISION === '1' || env.VEH_AUTO_PROVISION === 'true',
+    autoProvision,
   };
   for (const dir of [
     config.projectDir,

@@ -97,13 +97,15 @@ pnpm build   # 初回と更新時のみ
 pnpm start   # → http://localhost:4810(UI と API を同一ポートで配信)
 ```
 
+API は起動ごとに作るトークンで保護しています。`pnpm start` のときは、サーバーのログに出る `http://localhost:4810/#veh-token=...` を開いてください(トークンは HttpOnly Cookie に移り、アドレスバーからは消えます)。
+
 ### 開発時(ホットリロード)
 
 ```bash
 pnpm dev
 ```
 
-- Web UI: http://localhost:5180(API サーバー :4810 へ自動プロキシ)
+- Web UI: http://localhost:5180(API サーバー :4810 へ自動プロキシ。プロキシが `packages/server/.dev-token` を読んでトークンを付けるので、そのまま開けばよい)
 - 初回はセットアップ画面でメディアルート(例 `E:\footage`)を登録 →「スキャン開始」
 - サムネイル・VAD・プロキシはバックグラウンドジョブで順次生成。シーン解析と文字起こしは重いので各画面のボタンから明示的に投入します(夜寝る前に「この日を文字起こし」がおすすめ)
 
@@ -116,6 +118,10 @@ pnpm dev
 | `VEH_BACKUPS_DIR` | `<VEH_PROJECT_DIR>/backups` | 世代バックアップの保存先。同期先を汚さないようローカルに分離したい時に指定 |
 | `VEH_MOUNTS_FILE` | `<VEH_CACHE_DIR>/mounts.json` | 素材ルートの「このマシンでの実パス」対応表(ローカル・非同期)。cross-OS 解決用 |
 | `PORT` | `4810` | API サーバーポート |
+| `VEH_HOST` | `127.0.0.1` | listen するアドレス。LAN から使う場合だけ `0.0.0.0` 等を指定(下の `VEH_ALLOWED_HOSTS` も必要) |
+| `VEH_ALLOWED_HOSTS` | なし | 追加で許可する Host ヘッダ(カンマ区切り。例 `192.168.1.10:4810`)。DNS rebinding 対策で、既定は `localhost:<port>` / `127.0.0.1:<port>` のみ |
+| `VEH_ALLOWED_ORIGINS` | なし | 追加で許可する Origin(カンマ区切り) |
+| `VEH_DEV_TOKEN_FILE` | `packages/server/.dev-token` | 起動ごとの API トークンの書き出し先(dev の vite proxy が読む)。デスクトップ版では書き出さない |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | `ffmpeg` / `ffprobe` | バイナリのパス |
 | `VEH_VAD_MODEL` | `packages/server/models/silero_vad.onnx` | VAD モデルパス |
 | `WHISPER_PATH` | `whisper-cli` | whisper.cpp CLI のパス |

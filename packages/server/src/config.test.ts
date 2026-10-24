@@ -48,3 +48,27 @@ describe('loadConfig のディレクトリ配置', () => {
     expect(loadConfig({ VEH_PROJECT_DIR: proj, VEH_BACKUPS_DIR: local }).backupsDir).toBe(local);
   });
 });
+
+describe('loadConfig のネットワーク公開範囲', () => {
+  it('既定では 127.0.0.1 に bind し、追加の Host / Origin は許可しない', () => {
+    const c = loadConfig({ VEH_PROJECT_DIR: tmp() });
+    expect(c.host).toBe('127.0.0.1');
+    expect(c.extraAllowedHosts).toEqual([]);
+    expect(c.extraAllowedOrigins).toEqual([]);
+  });
+
+  it('LAN 公開は VEH_HOST / VEH_ALLOWED_HOSTS で明示的に opt-in する', () => {
+    const c = loadConfig({
+      VEH_PROJECT_DIR: tmp(),
+      VEH_HOST: '0.0.0.0',
+      VEH_ALLOWED_HOSTS: '192.168.1.10:4810, mybox.local:4810',
+    });
+    expect(c.host).toBe('0.0.0.0');
+    expect(c.extraAllowedHosts).toEqual(['192.168.1.10:4810', 'mybox.local:4810']);
+  });
+
+  it('パッケージ版(VEH_AUTO_PROVISION=1)では開発用トークンファイルを書かない', () => {
+    expect(loadConfig({ VEH_PROJECT_DIR: tmp(), VEH_AUTO_PROVISION: '1' }).devTokenFile).toBeNull();
+    expect(loadConfig({ VEH_PROJECT_DIR: tmp() }).devTokenFile).toMatch(/\.dev-token$/);
+  });
+});

@@ -238,9 +238,19 @@ fn start_server(app: &tauri::AppHandle) {
                         // 進捗 JSON をそのまま splash に転送
                         let _ = app_handle.emit("setup-progress", rest.to_string());
                     } else if let Some(rest) = line.strip_prefix("VEH_READY ") {
-                        let ready_port: u16 = rest.trim().parse().unwrap_or(port);
-                        let url = format!("http://localhost:{ready_port}/");
-                        eprintln!("[veh] サーバー準備完了 port={ready_port} → navigate {url}");
+                        // "VEH_READY <port> <token>"。token は起動ごとの API トークン(base64url)
+                        let mut parts = rest.split_whitespace();
+                        let ready_port: u16 =
+                            parts.next().and_then(|p| p.parse().ok()).unwrap_or(port);
+                        let token: String = parts
+                            .next()
+                            .unwrap_or("")
+                            .chars()
+                            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                            .collect();
+                        // フラグメントで渡す(サーバーへは送られない)。UI が HttpOnly Cookie に換える
+                        let url = format!("http://localhost:{ready_port}/#veh-token={token}");
+                        eprintln!("[veh] サーバー準備完了 port={ready_port} → navigate http://localhost:{ready_port}/");
                         if let Some(win) = app_handle.get_webview_window("main") {
                             let _ = win.eval(&format!("window.location.replace('{url}')"));
                         }

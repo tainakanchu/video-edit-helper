@@ -4,6 +4,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { Clip, SceneList } from '@veh/shared';
 import type { Config } from '../config.js';
+import { safeIdSegment } from '../ids.js';
 
 /** 近接転換点の間引き閾値(秒)。これ未満の間隔は同一シーンとして 1 点に潰す */
 const SCENE_MIN_GAP_SEC = 1.5;
@@ -12,7 +13,7 @@ const SCENE_THRESHOLD = 0.35;
 
 /** シーン結果 JSON のパス */
 export function scenesPath(config: Config, clipId: string): string {
-  return path.join(config.scenesDir, `${clipId}.json`);
+  return path.join(config.scenesDir, `${safeIdSegment(clipId)}.json`);
 }
 
 /** 既にシーン結果が存在するか(スキップ判定用) */

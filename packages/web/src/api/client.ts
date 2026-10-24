@@ -82,6 +82,10 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     } catch {
       // ボディが JSON でない場合は既定メッセージのまま
     }
+    if (res.status === 401) {
+      message =
+        'サーバーの認証に失敗しました。アプリを再起動するか、サーバーのログに表示された URL を開き直してください';
+    }
     throw new ApiError(message, res.status);
   }
 

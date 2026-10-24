@@ -35,6 +35,7 @@ import type { TranscriptCache } from '../search/transcriptCache.js';
 import type { JobCoordinator } from '../jobs/coordinator.js';
 import type { MountStore } from '../media/mounts.js';
 import { registerEdlRoutes } from '../edl/http.js';
+import { isValidClipId } from '../ids.js';
 
 const settingsSchema = z.object({
   settings: z
@@ -153,6 +154,15 @@ function findDayIdForClip(store: ProjectStore, clipId: string): string | undefin
 /** shared の apiPaths が定義する全エンドポイントを登録 */
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { config, store, queue, coordinator, transcriptCache, mounts } = deps;
+
+  // :clipId はキャッシュのファイル名(<clipId>.json 等)に使われるので、どのルートでも先に検証する。
+  // `..%2F..%2Fx` のようなパストラバーサルを handler に届かせない
+  app.addHook('preValidation', async (req, reply) => {
+    const params = req.params as Record<string, unknown> | undefined;
+    if (params && 'clipId' in params && !isValidClipId(params.clipId)) {
+      return reply.status(400).send({ error: 'invalid clipId' });
+    }
+  });
 
   // EDL タイムライン。/api/edl/active 等の静的パスを先に登録する
   registerEdlRoutes(app, store);
@@ -315,7 +325,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     async (req, reply): Promise<void> => {
       const { clipId, interval, timeFile } = req.params;
       // パストラバーサル対策: 各セグメントを厳格にバリデーション
-      if (!/^[a-f0-9]{1,64}$/.test(clipId)) return sendError(reply, 400, 'invalid clipId');
+      if (!isValidClipId(clipId)) return sendError(reply, 400, 'invalid clipId');
       const intervalNum = Number(interval);
       if (!Number.isInteger(intervalNum) || intervalNum <= 0) {
         return sendError(reply, 400, 'invalid interval');

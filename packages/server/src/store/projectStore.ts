@@ -30,6 +30,14 @@ const MAX_COALESCE_MS = 15 * 1000;
 const BACKUP_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const BACKUP_KEEP = 50;
 
+/**
+ * ID で引くときは自身のプロパティだけを見る。`__proto__` や `constructor` を ID として
+ * 渡されても Object.prototype を返さない(返すとその後の代入で prototype pollution になる)。
+ */
+function ownValue<T>(record: Record<string, T>, id: string): T | undefined {
+  return Object.hasOwn(record, id) ? record[id] : undefined;
+}
+
 export interface ProjectStoreOptions {
   projectFile: string;
   backupsDir: string;
@@ -153,7 +161,7 @@ export class ProjectStore {
   }
 
   getClip(clipId: ID): Clip | undefined {
-    return this.state.clips[clipId];
+    return ownValue(this.state.clips, clipId);
   }
 
   getAllClips(): Clip[] {
@@ -348,7 +356,7 @@ export class ProjectStore {
     noteId: ID,
     patch: { text?: string; tags?: string[]; status?: NoteStatus; timeSec?: number },
   ): Note | undefined {
-    const note = this.state.notes[noteId];
+    const note = ownValue(this.state.notes, noteId);
     if (!note) return undefined;
     if (patch.text !== undefined) note.text = patch.text;
     if (patch.tags !== undefined) note.tags = patch.tags;
@@ -360,14 +368,14 @@ export class ProjectStore {
   }
 
   deleteNote(noteId: ID): boolean {
-    if (!this.state.notes[noteId]) return false;
+    if (!ownValue(this.state.notes, noteId)) return false;
     delete this.state.notes[noteId];
     this.scheduleSave();
     return true;
   }
 
   getSelection(selectionId: ID): Selection | undefined {
-    return this.state.selections[selectionId];
+    return ownValue(this.state.selections, selectionId);
   }
 
   getAllSelections(): Selection[] {
@@ -411,7 +419,7 @@ export class ProjectStore {
     this.state.selections[selection.id] = selection;
     // 昇格元の付箋があれば promoted に更新
     if (input.noteId) {
-      const note = this.state.notes[input.noteId];
+      const note = ownValue(this.state.notes, input.noteId);
       if (note) {
         note.status = 'promoted';
         note.updatedAt = now;
@@ -432,7 +440,7 @@ export class ProjectStore {
       orderKey?: number | null;
     },
   ): Selection | undefined {
-    const sel = this.state.selections[selectionId];
+    const sel = ownValue(this.state.selections, selectionId);
     if (!sel) return undefined;
     if (patch.inSec !== undefined) sel.inSec = patch.inSec;
     if (patch.outSec !== undefined) sel.outSec = patch.outSec;
@@ -450,10 +458,10 @@ export class ProjectStore {
    * 紐づく Note(noteId)が存在し promoted なら open へ戻す。
    */
   deleteSelection(selectionId: ID): boolean {
-    const sel = this.state.selections[selectionId];
+    const sel = ownValue(this.state.selections, selectionId);
     if (!sel) return false;
     if (sel.noteId) {
-      const note = this.state.notes[sel.noteId];
+      const note = ownValue(this.state.notes, sel.noteId);
       if (note && note.status === 'promoted') {
         note.status = 'open';
         note.updatedAt = new Date().toISOString();
@@ -478,7 +486,7 @@ export class ProjectStore {
   }
 
   setReviewStatus(clipId: ID, status: ReviewStatus): Clip | undefined {
-    const clip = this.state.clips[clipId];
+    const clip = ownValue(this.state.clips, clipId);
     if (!clip) return undefined;
     clip.reviewStatus = status;
     this.scheduleSave();
@@ -490,7 +498,7 @@ export class ProjectStore {
    * unreviewed のクリップは自動で in_progress に昇格(reviewed は変えない)。
    */
   addWatchedRanges(clipId: ID, ranges: TimeRange[]): Clip | undefined {
-    const clip = this.state.clips[clipId];
+    const clip = ownValue(this.state.clips, clipId);
     if (!clip) return undefined;
     let merged = clip.watchedRanges;
     for (const r of ranges) {
