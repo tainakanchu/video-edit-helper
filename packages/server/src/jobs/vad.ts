@@ -6,6 +6,7 @@ import type { VadProvider } from '../vad/silencedetect.js';
 import { SilenceDetectProvider } from '../vad/silencedetect.js';
 import { SileroProvider } from '../vad/silero.js';
 import type { Config } from '../config.js';
+import { safeIdSegment } from '../ids.js';
 
 /** ファイルローカル秒のマージにも使う epsilon */
 const VAD_EPSILON = 0.5;
@@ -29,7 +30,7 @@ export async function selectVadProvider(config: Config): Promise<VadProvider> {
 
 /** VAD 結果 JSON のパス */
 export function vadResultPath(config: Config, clipId: string): string {
-  return path.join(config.vadDir, `${clipId}.json`);
+  return path.join(config.vadDir, `${safeIdSegment(clipId)}.json`);
 }
 
 /** 既に VAD 結果が存在するか */

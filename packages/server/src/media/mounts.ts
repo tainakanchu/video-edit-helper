@@ -39,7 +39,7 @@ export function relPartsUnder(storedPath: string, root: string): string[] | null
  */
 export function resolveMediaPath(storedPath: string, mediaRoots: string[], mounts: MountMap): string {
   for (const root of mediaRoots) {
-    const local = mounts[root];
+    const local = Object.hasOwn(mounts, root) ? mounts[root] : undefined;
     if (!local) continue;
     const parts = relPartsUnder(storedPath, root);
     if (parts) return path.join(local, ...parts);
@@ -55,7 +55,7 @@ export function resolveMediaPath(storedPath: string, mediaRoots: string[], mount
  */
 export function toStoredPath(localPath: string, mediaRoots: string[], mounts: MountMap): string {
   for (const root of mediaRoots) {
-    const local = mounts[root];
+    const local = Object.hasOwn(mounts, root) ? mounts[root] : undefined;
     if (!local) continue;
     const parts = relPartsUnder(localPath, local);
     if (!parts) continue;

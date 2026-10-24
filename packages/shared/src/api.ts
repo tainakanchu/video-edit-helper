@@ -26,6 +26,9 @@ import type {
 
 export const SERVER_PORT_DEFAULT = 4810;
 
+/** UI が API トークンを受け取る URL フラグメントのキー(http://localhost:<port>/#veh-token=...) */
+export const TOKEN_FRAGMENT_KEY = 'veh-token';
+
 export const defaultSettings: ProjectSettings = {
   mediaRoots: [],
   dayStartHour: 4,
@@ -46,6 +49,8 @@ export const defaultSettings: ProjectSettings = {
  */
 export const apiPaths = {
   health: () => `/api/health`,
+  /** POST(X-VEH-Token ヘッダ必須)→ 204。トークンを HttpOnly Cookie に換える */
+  authSession: () => `/api/auth/session`,
   /** GET → MountsResponse / PUT { root, localPath } → MountsResponse(cross-OS のマシン別パス対応) */
   mounts: () => `/api/mounts`,
   /** GET → ProjectResponse */

@@ -4,10 +4,11 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { Clip, SourceFile } from '@veh/shared';
 import type { Config } from '../config.js';
+import { safeIdSegment } from '../ids.js';
 
 /** fileId に対応するプロキシ動画(常に mp4)のパス */
 export function proxyFilePath(config: Config, fileId: string): string {
-  return path.join(config.proxiesDir, `${fileId}.mp4`);
+  return path.join(config.proxiesDir, `${safeIdSegment(fileId)}.mp4`);
 }
 
 /** プロキシが生成済みか(ファイルが存在しサイズ > 0) */

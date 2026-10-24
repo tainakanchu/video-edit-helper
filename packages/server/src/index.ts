@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
-import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import { loadConfig } from './config.js';
 import { ProjectStore, ProjectUnreadableError } from './store/projectStore.js';
@@ -11,6 +10,8 @@ import { TranscriptCache } from './search/transcriptCache.js';
 import { registerRoutes } from './routes/api.js';
 import { ensureDependencies, makeStdoutEmitter } from './provision/index.js';
 import { MountStore } from './media/mounts.js';
+import { generateToken, registerSecurity, writeTokenFile } from './security.js';
+import { TOKEN_FRAGMENT_KEY } from '@veh/shared';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -76,7 +77,14 @@ async function main(): Promise<void> {
   coordinator.syncProxyFlags();
 
   const app = Fastify({ logger: true, bodyLimit: 5 * 1024 * 1024 });
-  await app.register(cors, { origin: true });
+  // Host / Origin / 起動ごとのトークンを検証する(CORS もここで自分の Origin だけに絞る)
+  const token = generateToken();
+  await registerSecurity(app, {
+    token,
+    port: config.port,
+    extraHosts: config.extraAllowedHosts,
+    extraOrigins: config.extraAllowedOrigins,
+  });
 
   registerRoutes(app, { config, store, queue, coordinator, transcriptCache, mounts });
 
@@ -98,6 +106,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (): Promise<void> => {
     try {
+      if (config.devTokenFile) fs.rmSync(config.devTokenFile, { force: true });
       await store.flush(); // 保留中の保存を確定
       await app.close();
     } finally {
@@ -107,12 +116,30 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => void shutdown());
   process.on('SIGTERM', () => void shutdown());
 
-  await app.listen({ port: config.port, host: '0.0.0.0' });
+  await app.listen({ port: config.port, host: config.host });
   app.log.info(`project dir: ${config.projectDir}`);
+  if (config.host !== '127.0.0.1' && config.host !== 'localhost' && config.host !== '::1') {
+    app.log.warn(
+      `${config.host} で listen しています(LAN に公開)。Host ヘッダは VEH_ALLOWED_HOSTS に足したものだけ通します`,
+    );
+  }
 
-  // Tauri(サイドカー親)へ「listen 開始」を通知する。Rust 側はこの行を受けて
-  // WebView を http://localhost:<port> へ遷移させる(splash → 本体)。
-  process.stdout.write(`VEH_READY ${config.port}\n`);
+  if (config.devTokenFile) {
+    // dev: vite の proxy がこのファイルを読んで X-VEH-Token を付ける
+    writeTokenFile(config.devTokenFile, token);
+  }
+  if (!config.autoProvision) {
+    // pnpm start 等でブラウザから直接開く場合の入口(フラグメントはサーバーへ送られない)
+    console.log(
+      `[veh] UI: http://localhost:${config.port}/#${TOKEN_FRAGMENT_KEY}=${token}` +
+        `  (dev の vite 経由なら http://localhost:5180/ をそのまま開けばよい)`,
+    );
+  }
+
+  // Tauri(サイドカー親)へ「listen 開始」とトークンを通知する。Rust 側はこの行を受けて
+  // WebView を http://localhost:<port>/#veh-token=<token> へ遷移させる(splash → 本体)。
+  // stdout は Tauri とのパイプなので外へは出ない。
+  process.stdout.write(`VEH_READY ${config.port} ${token}\n`);
 }
 
 main().catch((err) => {

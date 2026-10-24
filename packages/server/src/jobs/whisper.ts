@@ -12,6 +12,7 @@ import {
   type TranscriptSegment,
 } from '@veh/shared';
 import type { Config } from '../config.js';
+import { safeIdSegment } from '../ids.js';
 import type { VadProvider } from '../vad/silencedetect.js';
 import { readVadResult, runVadForClip } from './vad.js';
 import { buildSpeechBlocks } from '../transcribe/blocks.js';
@@ -20,7 +21,7 @@ import { assembleSegments, type BlockResult } from '../transcribe/assemble.js';
 
 /** 文字起こし結果 JSON のパス */
 export function transcriptPath(config: Config, clipId: string): string {
-  return path.join(config.transcriptsDir, `${clipId}.json`);
+  return path.join(config.transcriptsDir, `${safeIdSegment(clipId)}.json`);
 }
 
 /** 既に文字起こし結果が存在するか */
