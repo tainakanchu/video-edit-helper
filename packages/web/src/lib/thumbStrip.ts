@@ -95,6 +95,12 @@ export interface SelectedInterval {
   coverage: number;
 }
 
+function intervalKeys(intervals: Record<string, number[]>): number[] {
+  return Object.keys(intervals)
+    .map(Number)
+    .filter(n => !isNaN(n) && n > 0);
+}
+
 /**
  * マニフェストの intervals からカバレッジ最大の interval を採用する。
  * 同率の場合は小さい interval(密なほう)を優先する。
@@ -104,10 +110,7 @@ export function selectInterval(
   intervals: Record<string, number[]>,
   totalSec: number,
 ): SelectedInterval | null {
-  const keys = Object.keys(intervals)
-    .map(Number)
-    .filter(n => !isNaN(n) && n > 0)
-    .sort((a, b) => a - b);
+  const keys = intervalKeys(intervals).sort((a, b) => a - b);
 
   let best: SelectedInterval | null = null;
   for (const intervalSec of keys) {
@@ -132,9 +135,7 @@ export function minIntervalCoverage(
   intervals: Record<string, number[]>,
   totalSec: number,
 ): number {
-  const keys = Object.keys(intervals)
-    .map(Number)
-    .filter(n => !isNaN(n) && n > 0);
+  const keys = intervalKeys(intervals);
   if (keys.length === 0) return 0;
   const minInterval = Math.min(...keys);
   const times = intervals[String(minInterval)] ?? [];
